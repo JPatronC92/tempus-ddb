@@ -2,8 +2,9 @@ import ctypes
 import json
 import os
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ext = ".so"
-lib_path = f"/data/data/com.termux/files/home/tempus-ddb/target/debug/libtempus_ddb{ext}"
+lib_path = os.path.join(BASE_DIR, "target", "debug", f"libtempus_ddb{ext}")
 
 if not os.path.exists(lib_path):
     raise FileNotFoundError(f"¡Librería dinámica no encontrada en {lib_path}!")

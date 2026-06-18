@@ -4,9 +4,10 @@ import sqlite3
 import time
 import os
 
-BIN_PATH = "/data/data/com.termux/files/home/tempus-ddb/target/debug/tempus-ddb"
-DB_PATH = "/data/data/com.termux/files/home/tempus-ddb/stress_test.db"
-KEY_FILE = "/data/data/com.termux/files/home/tempus-ddb/stress_keys.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BIN_PATH = os.path.join(BASE_DIR, "target", "debug", "tempus-ddb")
+DB_PATH = os.path.join(BASE_DIR, "stress_test.db")
+KEY_FILE = os.path.join(BASE_DIR, "stress_keys.json")
 
 def run_cmd(*args):
     result = subprocess.run([BIN_PATH] + list(args), capture_output=True, text=True)

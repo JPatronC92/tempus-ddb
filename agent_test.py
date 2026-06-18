@@ -84,7 +84,13 @@ async def run_anthropic_agent(session, mcp_tools):
 
     messages = [{"role": "user", "content": "Please complete your task now. Initialize db, generate keys, and record the decision."}]
     
+    iterations = 0
     while True:
+        iterations += 1
+        if iterations > 10:
+            print("🤖 [Claude]: Límite de iteraciones alcanzado (10). Abortando para evitar consumo excesivo de API.")
+            break
+
         response = await client.messages.create(
             model=MODEL,
             max_tokens=1000,

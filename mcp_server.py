@@ -7,13 +7,15 @@ import secrets
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
+import decimal
 
 # ── Global configuration ──────────────────────────────────────────────
-BIN_PATH = "/data/data/com.termux/files/home/tempus-ddb/target/debug/tempus-ddb"
-SANDBOX_DIR = os.path.realpath("/data/data/com.termux/files/home/tempus-ddb")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BIN_PATH = os.path.join(BASE_DIR, "target", "debug", "tempus-ddb")
+SANDBOX_DIR = os.path.realpath(BASE_DIR)
 WALLET_FILE = os.path.join(SANDBOX_DIR, "agent_wallet.json")
 SECRET_KEY_FILE = os.path.join(SANDBOX_DIR, "server_secret.key")
-COST_PER_RECORD = 0.01
+COST_PER_RECORD = decimal.Decimal("0.01")
 
 # ── Async lock for wallet operations (C8) ─────────────────────────────
 _wallet_lock = asyncio.Lock()
@@ -32,18 +34,20 @@ def _get_or_create_secret() -> bytes:
 _SERVER_SECRET = _get_or_create_secret()
 
 
-def _compute_hmac(balance: float) -> str:
+def _compute_hmac(balance) -> str:
     """Compute HMAC-SHA256 of the balance value."""
-    msg = json.dumps(balance, sort_keys=True).encode()
+    msg = json.dumps(float(balance), sort_keys=True).encode()
     return hmac.new(_SERVER_SECRET, msg, hashlib.sha256).hexdigest()
 
 
 # ── Wallet helpers (C1 – HMAC integrity) ──────────────────────────────
 def load_wallet() -> dict:
     if not os.path.exists(WALLET_FILE):
-        return {"balance_usdc": 0.0}
+        return {"balance_usdc": decimal.Decimal("0.0")}
     with open(WALLET_FILE, "r") as f:
-        data = json.load(f)
+        data = json.load(f, parse_float=decimal.Decimal)
+    if "balance_usdc" in data and not isinstance(data["balance_usdc"], decimal.Decimal):
+        data["balance_usdc"] = decimal.Decimal(str(data["balance_usdc"]))
     # Verify HMAC
     stored_hmac = data.get("hmac")
     if stored_hmac is None:
@@ -56,8 +60,10 @@ def load_wallet() -> dict:
 
 def save_wallet(wallet: dict) -> None:
     wallet["hmac"] = _compute_hmac(wallet["balance_usdc"])
+    wallet_copy = wallet.copy()
+    wallet_copy["balance_usdc"] = float(wallet["balance_usdc"])
     with open(WALLET_FILE, "w") as f:
-        json.dump(wallet, f, indent=2)
+        json.dump(wallet_copy, f, indent=2)
 
 
 # ── Path-traversal guard (C3) ─────────────────────────────────────────
@@ -160,6 +166,15 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["amount"]
             }
+        ),
+        Tool(
+            name="tempus_cleanup",
+            description="Delete the database and keys in the sandbox to start fresh.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
         )
     ]
 
@@ -194,7 +209,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     error_response = {
                         "error": "insufficient_funds",
                         "action_required": "send_crypto",
-                        "amount": COST_PER_RECORD,
+                        "amount": float(COST_PER_RECORD),
                         "currency": "USDC",
                         "wallet_address": "0xTEMPUSAGENTWALLET123456",
                         "message": "You must fund your wallet using the 'tempus_fund_wallet' tool before calling 'tempus_record'."
@@ -221,7 +236,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=output)]
 
         elif name == "tempus_fund_wallet":
-            amount = float(arguments["amount"])
+            amount = decimal.Decimal(str(arguments["amount"]))
             # ── Reject non-positive amounts (C1 / H4) ──
             if amount <= 0:
                 raise ValueError("Funding amount must be a positive number.")
@@ -230,12 +245,25 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 wallet = load_wallet()
                 wallet["balance_usdc"] += amount
                 save_wallet(wallet)
-            return [TextContent(type="text", text=f"Wallet successfully funded with {amount} USDC. New balance: {wallet['balance_usdc']:.2f} USDC.")]
+            return [TextContent(type="text", text=f"Wallet successfully funded with {amount} USDC. New balance: {float(wallet['balance_usdc']):.2f} USDC.")]
+
+        elif name == "tempus_cleanup":
+            async with _wallet_lock:
+                db_path = os.path.join(SANDBOX_DIR, "tempus_ddb.db")
+                keys_path = os.path.join(SANDBOX_DIR, "keys.json")
+                if os.path.exists(db_path):
+                    os.remove(db_path)
+                if os.path.exists(keys_path):
+                    os.remove(keys_path)
+            return [TextContent(type="text", text="Cleanup successful. Database and keys deleted.")]
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
-        return [TextContent(type="text", text=f"Error executing tool {name}: {str(e)}")]
+        err_msg = str(e)
+        if isinstance(e, RuntimeError) and "Error ejecutando" in err_msg:
+            return [TextContent(type="text", text="Error: Subprocess command failed.")]
+        return [TextContent(type="text", text=f"Error executing tool {name}: {err_msg}")]
 
 async def main():
     async with stdio_server() as (read_stream, write_stream):

@@ -3,8 +3,8 @@ import json
 import time
 import os
 
-# Ruta al binario compilado en tu Termux
-BIN_PATH = "/data/data/com.termux/files/home/tempus-ddb/target/debug/tempus-ddb"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BIN_PATH = os.path.join(BASE_DIR, "target", "debug", "tempus-ddb")
 KEY_FILE = "actor_keys.json"
 DB_FILE = "tempus_ddb.db"
 
@@ -13,7 +13,7 @@ def run_cmd(args):
     cmd = [BIN_PATH] + args
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"❌ Error ejecutando {' '.join(args)}:\n{result.stderr}")
+        raise RuntimeError(f"❌ Error ejecutando {' '.join(args)}:\n{result.stderr}")
     return result.stdout.strip()
 
 print("🚀 Iniciando prueba de la Decision Database (Tempus DDB)...\n")
@@ -58,10 +58,14 @@ print("   ✅ Decisión 2 sellada y encadenada.\n")
 print("5️⃣ Escaneando y validando la cadena criptográfica completa...")
 validacion = run_cmd(["validate"])
 print(f"   🔍 Resultado del Validador Rust:\n   {validacion}\n")
+if not validacion:
+    raise ValueError("❌ Expected validation output but got empty string.")
 
 # 6. Exportar a JSON (Preparación para la nube)
 print("6️⃣ Exportando Ledger a JSON para futura sincronización...")
 exportacion = run_cmd(["export"])
 print(f"   📦 Primeros caracteres del JSON exportado: {exportacion[:100]}...\n")
+if not exportacion.startswith("[") and not exportacion.startswith("{"):
+    raise ValueError("❌ Expected JSON export output, got invalid format.")
 
 print("🎉 Prueba finalizada con éxito.")

@@ -206,21 +206,36 @@ impl SqliteStorage {
         timestamp: u64,
         payload: &str,
         rules_evaluated: &str,
-    ) -> String {
-        let canonical = format!(
-            "parent_id:{}\nactor_id:{}\ntimestamp:{}\npayload:{}\nrules:{}\n",
-            parent_id, actor_id, timestamp, payload, rules_evaluated
-        );
+    ) -> [u8; 32] {
+        #[derive(Serialize)]
+        struct CanonicalPayload<'a> {
+            parent_id: &'a str,
+            actor_id: &'a str,
+            timestamp: u64,
+            payload: serde_json::Value,
+            rules_evaluated: serde_json::Value,
+        }
+
+        let payload_val: serde_json::Value = serde_json::from_str(payload).unwrap_or(serde_json::Value::Null);
+        let rules_val: serde_json::Value = serde_json::from_str(rules_evaluated).unwrap_or(serde_json::Value::Null);
+
+        let canonical = CanonicalPayload {
+            parent_id,
+            actor_id,
+            timestamp,
+            payload: payload_val,
+            rules_evaluated: rules_val,
+        };
+        
+        let canonical_bytes = serde_json::to_vec(&canonical).unwrap();
 
         let mut hasher = Sha256::new();
-        hasher.update(canonical.as_bytes());
-        let result = hasher.finalize();
-        hex::encode(result)
+        hasher.update(&canonical_bytes);
+        hasher.finalize().into()
     }
 
-    /// Get the last recorded decision (by causal depth descending).
-    fn get_last_decision(&self) -> Result<Option<Decision>, String> {
-        let mut stmt = self.conn.prepare(
+    fn get_last_decision_conn(conn: &rusqlite::Connection) -> Result<Option<Decision>, String> {
+        let mut stmt = conn.prepare(
             "SELECT id, parent_id, causal_depth, actor_id, timestamp, payload, rules_evaluated, signature
              FROM decisions
              ORDER BY causal_depth DESC, timestamp DESC
@@ -230,18 +245,22 @@ impl SqliteStorage {
         let mut rows = stmt.query([]).map_err(|e| format!("Failed to query database: {}", e))?;
         if let Some(row) = rows.next().map_err(|e| format!("Error advancing row: {}", e))? {
             Ok(Some(Decision {
-                id: row.get(0).unwrap(),
-                parent_id: row.get(1).unwrap(),
-                causal_depth: row.get(2).unwrap(),
-                actor_id: row.get(3).unwrap(),
-                timestamp: row.get(4).unwrap(),
-                payload: row.get(5).unwrap(),
-                rules_evaluated: row.get(6).unwrap(),
-                signature: row.get(7).unwrap(),
+                id: row.get(0).map_err(|e| e.to_string())?,
+                parent_id: row.get(1).map_err(|e| e.to_string())?,
+                causal_depth: row.get(2).map_err(|e| e.to_string())?,
+                actor_id: row.get(3).map_err(|e| e.to_string())?,
+                timestamp: row.get(4).map_err(|e| e.to_string())?,
+                payload: row.get(5).map_err(|e| e.to_string())?,
+                rules_evaluated: row.get(6).map_err(|e| e.to_string())?,
+                signature: row.get(7).map_err(|e| e.to_string())?,
             }))
         } else {
             Ok(None)
         }
+    }
+
+    fn get_last_decision(&self) -> Result<Option<Decision>, String> {
+        Self::get_last_decision_conn(&self.conn)
     }
 }
 
@@ -259,8 +278,11 @@ impl StorageLayer for SqliteStorage {
         let verifying_key = signing_key.verifying_key();
         let actor_id = hex::encode(verifying_key.to_bytes());
 
+        let tx = self.conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+
         // Resolve parent_id and causal_depth
-        let (parent_id, causal_depth) = match self.get_last_decision()? {
+        let (parent_id, causal_depth) = match Self::get_last_decision_conn(&tx)? {
             Some(last_d) => {
                 if genesis {
                     // Even if there are existing decisions, --genesis forces a new root
@@ -278,6 +300,16 @@ impl StorageLayer for SqliteStorage {
             }
         };
 
+        if parent_id == "genesis" {
+            let mut stmt = tx.prepare("SELECT 1 FROM decisions WHERE parent_id = 'genesis' LIMIT 1")
+                .map_err(|e| format!("Prepare error: {}", e))?;
+            let exists = stmt.exists([])
+                .map_err(|e| format!("Query error: {}", e))?;
+            if exists {
+                return Err("A genesis decision already exists in the database.".to_string());
+            }
+        }
+
         // Timestamp in microseconds
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
@@ -285,14 +317,15 @@ impl StorageLayer for SqliteStorage {
             .as_micros() as u64;
 
         // Compute the deterministic SHA-256 hash
-        let id = Self::calculate_canonical_hash(&parent_id, &actor_id, timestamp, payload, rules);
+        let hash_bytes = Self::calculate_canonical_hash(&parent_id, &actor_id, timestamp, payload, rules);
+        let id = hex::encode(hash_bytes);
 
         // Ed25519 signature of the hash
-        let signature_struct = signing_key.sign(id.as_bytes());
+        let signature_struct = signing_key.sign(&hash_bytes);
         let signature = hex::encode(signature_struct.to_bytes());
 
         // Insert into SQLite
-        self.conn.execute(
+        tx.execute(
             "INSERT INTO decisions (id, parent_id, causal_depth, actor_id, timestamp, payload, rules_evaluated, signature)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             (
@@ -306,6 +339,8 @@ impl StorageLayer for SqliteStorage {
                 &signature,
             ),
         ).map_err(|e| format!("Failed to insert decision into SQLite: {}", e))?;
+
+        tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
         Ok(())
     }

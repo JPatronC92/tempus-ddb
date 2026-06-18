@@ -94,19 +94,34 @@ fn calculate_canonical_hash(
     timestamp: u64,
     payload: &str,
     rules_evaluated: &str,
-) -> String {
+) -> [u8; 32] {
     use sha2::{Digest, Sha256};
     
-    // Construct the canonical serialization format
-    let canonical = format!(
-        "parent_id:{}\nactor_id:{}\ntimestamp:{}\npayload:{}\nrules:{}\n",
-        parent_id, actor_id, timestamp, payload, rules_evaluated
-    );
+    #[derive(Serialize)]
+    struct CanonicalPayload<'a> {
+        parent_id: &'a str,
+        actor_id: &'a str,
+        timestamp: u64,
+        payload: serde_json::Value,
+        rules_evaluated: serde_json::Value,
+    }
+
+    let payload_val: serde_json::Value = serde_json::from_str(payload).unwrap_or(serde_json::Value::Null);
+    let rules_val: serde_json::Value = serde_json::from_str(rules_evaluated).unwrap_or(serde_json::Value::Null);
+
+    let canonical = CanonicalPayload {
+        parent_id,
+        actor_id,
+        timestamp,
+        payload: payload_val,
+        rules_evaluated: rules_val,
+    };
+    
+    let canonical_bytes = serde_json::to_vec(&canonical).unwrap();
     
     let mut hasher = Sha256::new();
-    hasher.update(canonical.as_bytes());
-    let result = hasher.finalize();
-    hex::encode(result)
+    hasher.update(&canonical_bytes);
+    hasher.finalize().into()
 }
 
 fn verify_decision_signature(d: &Decision) -> Result<(), String> {
@@ -125,7 +140,10 @@ fn verify_decision_signature(d: &Decision) -> Result<(), String> {
         .map_err(|_| "Signature must be exactly 64 bytes")?;
     let signature = Signature::from_bytes(&sig_array);
 
-    verifying_key.verify(d.id.as_bytes(), &signature)
+    let id_bytes = hex::decode(&d.id)
+        .map_err(|e| format!("Invalid id hex: {}", e))?;
+
+    verifying_key.verify(&id_bytes, &signature)
         .map_err(|e| format!("Cryptographic signature is invalid: {}", e))?;
 
     Ok(())
@@ -173,14 +191,14 @@ fn get_last_decision(conn: &Connection) -> Result<Option<Decision>, String> {
     let mut rows = stmt.query([]).map_err(|e| format!("Failed to query database: {}", e))?;
     if let Some(row) = rows.next().map_err(|e| format!("Error advancing row: {}", e))? {
         Ok(Some(Decision {
-            id: row.get(0).unwrap(),
-            parent_id: row.get(1).unwrap(),
-            causal_depth: row.get(2).unwrap(),
-            actor_id: row.get(3).unwrap(),
-            timestamp: row.get(4).unwrap(),
-            payload: row.get(5).unwrap(),
-            rules_evaluated: row.get(6).unwrap(),
-            signature: row.get(7).unwrap(),
+            id: row.get(0).map_err(|e| e.to_string())?,
+            parent_id: row.get(1).map_err(|e| e.to_string())?,
+            causal_depth: row.get(2).map_err(|e| e.to_string())?,
+            actor_id: row.get(3).map_err(|e| e.to_string())?,
+            timestamp: row.get(4).map_err(|e| e.to_string())?,
+            payload: row.get(5).map_err(|e| e.to_string())?,
+            rules_evaluated: row.get(6).map_err(|e| e.to_string())?,
+            signature: row.get(7).map_err(|e| e.to_string())?,
         }))
     } else {
         Ok(None)
@@ -197,14 +215,14 @@ fn get_decision(conn: &Connection, id: &str) -> Result<Option<Decision>, String>
     let mut rows = stmt.query([id]).map_err(|e| format!("Failed to query database: {}", e))?;
     if let Some(row) = rows.next().map_err(|e| format!("Error advancing row: {}", e))? {
         Ok(Some(Decision {
-            id: row.get(0).unwrap(),
-            parent_id: row.get(1).unwrap(),
-            causal_depth: row.get(2).unwrap(),
-            actor_id: row.get(3).unwrap(),
-            timestamp: row.get(4).unwrap(),
-            payload: row.get(5).unwrap(),
-            rules_evaluated: row.get(6).unwrap(),
-            signature: row.get(7).unwrap(),
+            id: row.get(0).map_err(|e| e.to_string())?,
+            parent_id: row.get(1).map_err(|e| e.to_string())?,
+            causal_depth: row.get(2).map_err(|e| e.to_string())?,
+            actor_id: row.get(3).map_err(|e| e.to_string())?,
+            timestamp: row.get(4).map_err(|e| e.to_string())?,
+            payload: row.get(5).map_err(|e| e.to_string())?,
+            rules_evaluated: row.get(6).map_err(|e| e.to_string())?,
+            signature: row.get(7).map_err(|e| e.to_string())?,
         }))
     } else {
         Ok(None)
@@ -328,7 +346,7 @@ fn main() {
             let actor_id = hex::encode(verifying_key.to_bytes());
 
             // Open db
-            let conn = match init_db(&db) {
+            let mut conn = match init_db(&db) {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("Error: {}", e);
@@ -336,10 +354,18 @@ fn main() {
                 }
             };
 
+            let tx = match conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("Error starting transaction: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
             // Resolve parent_id and causal_depth
             let (parent_id, causal_depth) = if let Some(p_id) = parent {
                 // Verify parent actually exists
-                match get_decision(&conn, &p_id) {
+                match get_decision(&tx, &p_id) {
                     Ok(Some(parent_d)) => (p_id, parent_d.causal_depth + 1),
                     Ok(None) => {
                         eprintln!("Error: Parent decision '{}' not found in database", p_id);
@@ -352,8 +378,14 @@ fn main() {
                 }
             } else {
                 // Query last decision
-                match get_last_decision(&conn) {
-                    Ok(Some(last_d)) => (last_d.id, last_d.causal_depth + 1),
+                match get_last_decision(&tx) {
+                    Ok(Some(last_d)) => {
+                        if genesis {
+                            ("genesis".to_string(), 0)
+                        } else {
+                            (last_d.id, last_d.causal_depth + 1)
+                        }
+                    },
                     Ok(None) => {
                         if genesis {
                             ("genesis".to_string(), 0)
@@ -369,6 +401,15 @@ fn main() {
                 }
             };
 
+            if parent_id == "genesis" {
+                let mut stmt = tx.prepare("SELECT 1 FROM decisions WHERE parent_id = 'genesis' LIMIT 1").unwrap();
+                let exists = stmt.exists([]).unwrap_or(false);
+                if exists {
+                    eprintln!("Error: A genesis decision already exists in the database.");
+                    std::process::exit(1);
+                }
+            }
+
             // Timestamp in microseconds
             let timestamp = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -376,11 +417,12 @@ fn main() {
                 .as_micros() as u64;
 
             // Generate deterministic SHA-256 hash
-            let id = calculate_canonical_hash(&parent_id, &actor_id, timestamp, &payload, &rules);
+            let hash_bytes = calculate_canonical_hash(&parent_id, &actor_id, timestamp, &payload, &rules);
+            let id = hex::encode(hash_bytes);
 
             // Cryptographic signing of the ID hash
             use ed25519_dalek::Signer;
-            let signature_struct = signing_key.sign(id.as_bytes());
+            let signature_struct = signing_key.sign(&hash_bytes);
             let signature = hex::encode(signature_struct.to_bytes());
 
             let decision = Decision {
@@ -395,8 +437,13 @@ fn main() {
             };
 
             // Insert into local SQLite
-            if let Err(e) = insert_decision(&conn, &decision) {
+            if let Err(e) = insert_decision(&tx, &decision) {
                 eprintln!("Error saving decision: {}", e);
+                std::process::exit(1);
+            }
+
+            if let Err(e) = tx.commit() {
+                eprintln!("Error committing transaction: {}", e);
                 std::process::exit(1);
             }
 
@@ -481,10 +528,11 @@ fn main() {
                     &d.payload,
                     &d.rules_evaluated
                 );
-                if computed_hash != d.id {
+                let computed_id = hex::encode(computed_hash);
+                if computed_id != d.id {
                     errors.push(format!(
                         "Decision '{}' has invalid hash. Computed: '{}', Recorded: '{}'",
-                        d.id, computed_hash, d.id
+                        d.id, computed_id, d.id
                     ));
                     continue;
                 }
@@ -556,21 +604,12 @@ fn main() {
                 }
             };
 
-            let query = if let Some(lim) = limit {
-                format!(
-                    "SELECT id, parent_id, causal_depth, actor_id, timestamp, payload, rules_evaluated, signature 
-                     FROM decisions 
-                     ORDER BY causal_depth DESC, timestamp DESC 
-                     LIMIT {}",
-                    lim
-                )
-            } else {
-                "SELECT id, parent_id, causal_depth, actor_id, timestamp, payload, rules_evaluated, signature 
-                 FROM decisions 
-                 ORDER BY causal_depth DESC, timestamp DESC".to_string()
-            };
+            let query = "SELECT id, parent_id, causal_depth, actor_id, timestamp, payload, rules_evaluated, signature 
+                         FROM decisions 
+                         ORDER BY causal_depth DESC, timestamp DESC 
+                         LIMIT ?1";
 
-            let mut stmt = match conn.prepare(&query) {
+            let mut stmt = match conn.prepare(query) {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("Failed to prepare select statement: {}", e);
@@ -578,7 +617,9 @@ fn main() {
                 }
             };
 
-            let rows = match stmt.query_map([], |row| {
+            let limit_val = limit.map(|l| l as i64).unwrap_or(-1);
+
+            let rows = match stmt.query_map([limit_val], |row| {
                 Ok(Decision {
                     id: row.get(0)?,
                     parent_id: row.get(1)?,
@@ -599,8 +640,12 @@ fn main() {
 
             let mut decisions = Vec::new();
             for r in rows {
-                if let Ok(d) = r {
-                    decisions.push(d);
+                match r {
+                    Ok(d) => decisions.push(d),
+                    Err(e) => {
+                        eprintln!("Error reading record: {}", e);
+                        std::process::exit(1);
+                    }
                 }
             }
 
@@ -648,8 +693,12 @@ fn main() {
 
             let mut decisions = Vec::new();
             for r in rows {
-                if let Ok(d) = r {
-                    decisions.push(d);
+                match r {
+                    Ok(d) => decisions.push(d),
+                    Err(e) => {
+                        eprintln!("Error reading record: {}", e);
+                        std::process::exit(1);
+                    }
                 }
             }
 
