@@ -284,6 +284,15 @@ fn main() {
                 std::process::exit(1);
             }
 
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let perms = std::fs::Permissions::from_mode(0o600);
+                if let Err(e) = std::fs::set_permissions(&output, perms) {
+                    eprintln!("Warning: Could not set key file permissions: {}", e);
+                }
+            }
+
             eprintln!("Cryptographic keys generated and saved to: {}", output);
             println!("{}", serde_json::to_string(&serde_json::json!({
                 "public_key": config.public_key

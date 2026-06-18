@@ -1,33 +1,101 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import os
-import subprocess
+import secrets
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-# Configuracion global
+# ── Global configuration ──────────────────────────────────────────────
 BIN_PATH = "/data/data/com.termux/files/home/tempus-ddb/target/debug/tempus-ddb"
-WALLET_FILE = "agent_wallet.json"
+SANDBOX_DIR = os.path.realpath("/data/data/com.termux/files/home/tempus-ddb")
+WALLET_FILE = os.path.join(SANDBOX_DIR, "agent_wallet.json")
+SECRET_KEY_FILE = os.path.join(SANDBOX_DIR, "server_secret.key")
 COST_PER_RECORD = 0.01
 
-def load_wallet():
+# ── Async lock for wallet operations (C8) ─────────────────────────────
+_wallet_lock = asyncio.Lock()
+
+# ── Server secret for HMAC (C1) ───────────────────────────────────────
+def _get_or_create_secret() -> bytes:
+    """Load existing secret key, or generate a new 32-byte random key."""
+    if os.path.exists(SECRET_KEY_FILE):
+        with open(SECRET_KEY_FILE, "rb") as f:
+            return f.read()
+    secret = secrets.token_bytes(32)
+    with open(SECRET_KEY_FILE, "wb") as f:
+        f.write(secret)
+    return secret
+
+_SERVER_SECRET = _get_or_create_secret()
+
+
+def _compute_hmac(balance: float) -> str:
+    """Compute HMAC-SHA256 of the balance value."""
+    msg = json.dumps(balance, sort_keys=True).encode()
+    return hmac.new(_SERVER_SECRET, msg, hashlib.sha256).hexdigest()
+
+
+# ── Wallet helpers (C1 – HMAC integrity) ──────────────────────────────
+def load_wallet() -> dict:
     if not os.path.exists(WALLET_FILE):
         return {"balance_usdc": 0.0}
     with open(WALLET_FILE, "r") as f:
-        return json.load(f)
+        data = json.load(f)
+    # Verify HMAC
+    stored_hmac = data.get("hmac")
+    if stored_hmac is None:
+        raise RuntimeError("Wallet integrity check failed: missing HMAC signature.")
+    expected = _compute_hmac(data["balance_usdc"])
+    if not hmac.compare_digest(stored_hmac, expected):
+        raise RuntimeError("Wallet integrity check failed: HMAC mismatch – wallet may have been tampered with.")
+    return data
 
-def save_wallet(wallet):
+
+def save_wallet(wallet: dict) -> None:
+    wallet["hmac"] = _compute_hmac(wallet["balance_usdc"])
     with open(WALLET_FILE, "w") as f:
         json.dump(wallet, f, indent=2)
 
-def run_cmd(args):
-    cmd = [BIN_PATH] + args
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"Error ejecutando {' '.join(args)}:\n{result.stderr}")
-    return result.stdout.strip()
 
+# ── Path-traversal guard (C3) ─────────────────────────────────────────
+def validate_path(path: str) -> str:
+    """Resolve *path* and ensure it stays inside SANDBOX_DIR."""
+    resolved = os.path.realpath(os.path.join(SANDBOX_DIR, path))
+    if ".." in os.path.normpath(path).split(os.sep):
+        raise ValueError(f"Path contains disallowed '..': {path}")
+    if not resolved.startswith(SANDBOX_DIR + os.sep) and resolved != SANDBOX_DIR:
+        raise ValueError(f"Path escapes sandbox: {path}")
+    return resolved
+
+
+# ── Async subprocess runner (C8) ──────────────────────────────────────
+async def run_cmd_async(args: list[str]) -> str:
+    """Run the Rust binary via asyncio subprocess instead of blocking subprocess.run."""
+    cmd = [BIN_PATH] + args
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(f"Error ejecutando {' '.join(args)}:\n{stderr.decode()}")
+    return stdout.decode().strip()
+
+
+# ── Input validation helpers (H4) ─────────────────────────────────────
+def validate_json_string(value: str, field_name: str) -> None:
+    """Ensure *value* is a valid JSON string."""
+    try:
+        json.loads(value)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError(f"'{field_name}' must be a valid JSON string: {exc}")
+
+
+# ── MCP server setup ──────────────────────────────────────────────────
 app = Server("tempus-ddb-mcp")
 
 @app.list_tools()
@@ -99,59 +167,71 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "tempus_init":
-            db = arguments.get("db", "tempus_ddb.db")
-            output = run_cmd(["init", "--db", db])
+            db = validate_path(arguments.get("db", "tempus_ddb.db"))
+            output = await run_cmd_async(["init", "--db", db])
             return [TextContent(type="text", text=f"Database initialized: {db}")]
-            
+
         elif name == "tempus_gen_keys":
-            output_file = arguments.get("output", "keys.json")
-            output = run_cmd(["gen-keys", "--output", output_file])
+            output_file = validate_path(arguments.get("output", "keys.json"))
+            output = await run_cmd_async(["gen-keys", "--output", output_file])
             return [TextContent(type="text", text=f"Keys generated at {output_file}:\n{output}")]
-            
+
         elif name == "tempus_record":
-            wallet = load_wallet()
-            if wallet["balance_usdc"] < COST_PER_RECORD:
-                error_response = {
-                    "error": "insufficient_funds",
-                    "action_required": "send_crypto",
-                    "amount": COST_PER_RECORD,
-                    "currency": "USDC",
-                    "wallet_address": "0xTEMPUSAGENTWALLET123456",
-                    "message": "You must fund your wallet using the 'tempus_fund_wallet' tool before calling 'tempus_record'."
-                }
-                return [TextContent(type="text", text=json.dumps(error_response, indent=2))]
-            
-            db = arguments["db"]
+            # ── Validate JSON inputs (H4) ──
             payload = arguments["payload"]
             rules = arguments["rules"]
-            keyfile = arguments["keyfile"]
-            
-            args_list = ["record", "--db", db, "--payload", payload, "--rules", rules, "--keyfile", keyfile]
-            if arguments.get("parent"):
-                args_list.extend(["--parent", arguments["parent"]])
-            if arguments.get("genesis"):
-                args_list.append("--genesis")
-                
-            output = run_cmd(args_list)
-            
-            # Deduct funds
-            wallet["balance_usdc"] -= COST_PER_RECORD
-            save_wallet(wallet)
-            
+            validate_json_string(payload, "payload")
+            validate_json_string(rules, "rules")
+
+            # ── Validate file paths (C3) ──
+            db = validate_path(arguments["db"])
+            keyfile = validate_path(arguments["keyfile"])
+
+            # ── Atomic wallet check-deduct under lock (C8) ──
+            async with _wallet_lock:
+                wallet = load_wallet()
+                if wallet["balance_usdc"] < COST_PER_RECORD:
+                    error_response = {
+                        "error": "insufficient_funds",
+                        "action_required": "send_crypto",
+                        "amount": COST_PER_RECORD,
+                        "currency": "USDC",
+                        "wallet_address": "0xTEMPUSAGENTWALLET123456",
+                        "message": "You must fund your wallet using the 'tempus_fund_wallet' tool before calling 'tempus_record'."
+                    }
+                    return [TextContent(type="text", text=json.dumps(error_response, indent=2))]
+
+                args_list = ["record", "--db", db, "--payload", payload, "--rules", rules, "--keyfile", keyfile]
+                if arguments.get("parent"):
+                    args_list.extend(["--parent", arguments["parent"]])
+                if arguments.get("genesis"):
+                    args_list.append("--genesis")
+
+                output = await run_cmd_async(args_list)
+
+                # Deduct funds
+                wallet["balance_usdc"] -= COST_PER_RECORD
+                save_wallet(wallet)
+
             return [TextContent(type="text", text=f"Record successful. Remaining balance: {wallet['balance_usdc']:.2f} USDC.\nOutput:\n{output}")]
-            
+
         elif name == "tempus_validate":
-            db = arguments.get("db", "tempus_ddb.db")
-            output = run_cmd(["validate", "--db", db])
+            db = validate_path(arguments.get("db", "tempus_ddb.db"))
+            output = await run_cmd_async(["validate", "--db", db])
             return [TextContent(type="text", text=output)]
-            
+
         elif name == "tempus_fund_wallet":
-            amount = arguments["amount"]
-            wallet = load_wallet()
-            wallet["balance_usdc"] += float(amount)
-            save_wallet(wallet)
+            amount = float(arguments["amount"])
+            # ── Reject non-positive amounts (C1 / H4) ──
+            if amount <= 0:
+                raise ValueError("Funding amount must be a positive number.")
+
+            async with _wallet_lock:
+                wallet = load_wallet()
+                wallet["balance_usdc"] += amount
+                save_wallet(wallet)
             return [TextContent(type="text", text=f"Wallet successfully funded with {amount} USDC. New balance: {wallet['balance_usdc']:.2f} USDC.")]
-            
+
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
