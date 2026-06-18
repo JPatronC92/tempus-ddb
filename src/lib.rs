@@ -1,7 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 use pyo3::prelude::*;
 #[cfg(not(target_arch = "wasm32"))]
-use pyo3::exceptions::PyPermissionError;
+use pyo3::exceptions::{PyPermissionError, PyRuntimeError, PyIOError};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -262,6 +262,143 @@ impl SqliteStorage {
     fn get_last_decision(&self) -> Result<Option<Decision>, String> {
         Self::get_last_decision_conn(&self.conn)
     }
+
+    pub fn validate_ledger(&self) -> Result<String, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, causal_depth, actor_id, timestamp, payload, rules_evaluated, signature
+             FROM decisions
+             ORDER BY causal_depth ASC, timestamp ASC"
+        ).map_err(|e| format!("Failed to prepare select statement: {}", e))?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(Decision {
+                id: row.get(0)?,
+                parent_id: row.get(1)?,
+                causal_depth: row.get(2)?,
+                actor_id: row.get(3)?,
+                timestamp: row.get(4)?,
+                payload: row.get(5)?,
+                rules_evaluated: row.get(6)?,
+                signature: row.get(7)?,
+            })
+        }).map_err(|e| format!("Failed to execute query: {}", e))?;
+
+        let mut decisions = Vec::new();
+        for r in rows {
+            match r {
+                Ok(d) => decisions.push(d),
+                Err(e) => return Err(format!("Error reading record: {}", e)),
+            }
+        }
+
+        if decisions.is_empty() {
+            return Ok(serde_json::to_string(&serde_json::json!({
+                "status": "valid",
+                "message": "Database is empty.",
+                "total_records": 0
+            })).unwrap());
+        }
+
+        use std::collections::HashMap;
+        let mut decision_map = HashMap::new();
+        for d in &decisions {
+            decision_map.insert(d.id.clone(), d.clone());
+        }
+
+        let mut errors = Vec::new();
+
+        for d in &decisions {
+            let computed_hash = Self::calculate_canonical_hash(
+                &d.parent_id,
+                &d.actor_id,
+                d.timestamp,
+                &d.payload,
+                &d.rules_evaluated
+            );
+            let computed_id = hex::encode(computed_hash);
+            if computed_id != d.id {
+                errors.push(format!(
+                    "Decision '{}' has invalid hash. Computed: '{}', Recorded: '{}'",
+                    d.id, computed_id, d.id
+                ));
+                continue;
+            }
+
+            use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+            let pub_bytes = match hex::decode(&d.actor_id) {
+                Ok(b) => b,
+                Err(e) => { errors.push(format!("Invalid actor_id: {}", e)); continue; }
+            };
+            let pub_array: [u8; 32] = match pub_bytes.try_into() {
+                Ok(a) => a,
+                Err(_) => { errors.push("Invalid public key size".to_string()); continue; }
+            };
+            let verifying_key = match VerifyingKey::from_bytes(&pub_array) {
+                Ok(k) => k,
+                Err(e) => { errors.push(format!("Invalid public key: {}", e)); continue; }
+            };
+
+            let sig_bytes = match hex::decode(&d.signature) {
+                Ok(b) => b,
+                Err(e) => { errors.push(format!("Invalid signature hex: {}", e)); continue; }
+            };
+            let sig_array: [u8; 64] = match sig_bytes.try_into() {
+                Ok(a) => a,
+                Err(_) => { errors.push("Invalid signature size".to_string()); continue; }
+            };
+            let signature = Signature::from_bytes(&sig_array);
+
+            let id_bytes = match hex::decode(&d.id) {
+                Ok(b) => b,
+                Err(e) => { errors.push(format!("Invalid id hex: {}", e)); continue; }
+            };
+
+            if let Err(e) = verifying_key.verify(&id_bytes, &signature) {
+                errors.push(format!("Decision '{}' signature verification failed: {}", d.id, e));
+                continue;
+            }
+
+            if d.parent_id != "genesis" {
+                match decision_map.get(&d.parent_id) {
+                    Some(parent) => {
+                        if d.causal_depth != parent.causal_depth + 1 {
+                            errors.push(format!(
+                                "Decision '{}' causal depth mismatch. Expected '{}', found '{}'",
+                                d.id, parent.causal_depth + 1, d.causal_depth
+                            ));
+                        }
+                        if d.timestamp < parent.timestamp {
+                            errors.push(format!(
+                                "Decision '{}' temporal anomaly. Precedes parent '{}'",
+                                d.id, d.parent_id
+                            ));
+                        }
+                    }
+                    None => {
+                        errors.push(format!("Decision '{}' orphan node. Parent '{}' missing", d.id, d.parent_id));
+                    }
+                }
+            } else {
+                if d.causal_depth != 0 {
+                    errors.push(format!("Genesis decision '{}' must have causal_depth 0", d.id));
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(serde_json::to_string(&serde_json::json!({
+                "status": "valid",
+                "message": "All decisions verified successfully.",
+                "total_records": decisions.len()
+            })).unwrap())
+        } else {
+            Err(serde_json::to_string(&serde_json::json!({
+                "status": "invalid",
+                "errors": errors,
+                "total_records": decisions.len()
+            })).unwrap())
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -391,7 +528,6 @@ impl StorageLayer for SqliteStorage {
             .map_err(|e| format!("Failed to serialize ledger to JSON: {}", e))
     }
 }
-
 // --- 3. BINDINGS PARA PYTHON (PYO3) ---
 #[cfg(not(target_arch = "wasm32"))]
 #[pyclass]
@@ -427,12 +563,73 @@ impl TempusDDB {
         );
         Ok(result_json)
     }
+
+    #[pyo3(signature = ())]
+    fn validate(&self) -> PyResult<String> {
+        if let Err(e) = check_license(&self.license_key) {
+            return Err(PyPermissionError::new_err(e));
+        }
+        self.storage.validate_ledger().map_err(|e| PyRuntimeError::new_err(e))
+    }
+
+    #[pyo3(signature = ())]
+    fn export(&self) -> PyResult<String> {
+        if let Err(e) = check_license(&self.license_key) {
+            return Err(PyPermissionError::new_err(e));
+        }
+        self.storage.export_ledger().map_err(|e| PyRuntimeError::new_err(e))
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[pyfunction]
+pub fn gen_keys(output: String) -> PyResult<String> {
+    use rand::rngs::OsRng;
+    use ed25519_dalek::SigningKey;
+    use std::fs::File;
+    use std::io::Write;
+
+    #[derive(Serialize)]
+    struct KeyPairConfig {
+        public_key: String,
+        private_key: String,
+    }
+
+    let mut csprng = OsRng;
+    let signing_key = SigningKey::generate(&mut csprng);
+    let verifying_key = signing_key.verifying_key();
+
+    let config = KeyPairConfig {
+        public_key: hex::encode(verifying_key.to_bytes()),
+        private_key: hex::encode(signing_key.to_bytes()),
+    };
+
+    let json_str = serde_json::to_string_pretty(&config)
+        .map_err(|e| PyRuntimeError::new_err(format!("Serialization error: {}", e)))?;
+
+    let mut file = File::create(&output)
+        .map_err(|e| PyIOError::new_err(format!("Error creating key file {}: {}", output, e)))?;
+
+    file.write_all(json_str.as_bytes())
+        .map_err(|e| PyIOError::new_err(format!("Error writing key file {}: {}", output, e)))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        if let Err(e) = std::fs::set_permissions(&output, perms) {
+            eprintln!("Warning: Could not set key file permissions: {}", e);
+        }
+    }
+
+    Ok(json_str)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[pymodule]
 fn tempus_ddb(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TempusDDB>()?;
+    m.add_function(wrap_pyfunction!(gen_keys, m)?)?;
     Ok(())
 }
 

@@ -11,7 +11,6 @@ import decimal
 
 # ── Global configuration ──────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BIN_PATH = os.path.join(BASE_DIR, "target", "debug", "tempus-ddb")
 SANDBOX_DIR = os.path.realpath(BASE_DIR)
 WALLET_FILE = os.path.join(SANDBOX_DIR, "agent_wallet.json")
 SECRET_KEY_FILE = os.path.join(SANDBOX_DIR, "server_secret.key")
@@ -76,20 +75,17 @@ def validate_path(path: str) -> str:
         raise ValueError(f"Path escapes sandbox: {path}")
     return resolved
 
+# ── Import PyO3 native module and Generate Local License ────────────────
+import tempus_ddb
+import string
 
-# ── Async subprocess runner (C8) ──────────────────────────────────────
-async def run_cmd_async(args: list[str]) -> str:
-    """Run the Rust binary via asyncio subprocess instead of blocking subprocess.run."""
-    cmd = [BIN_PATH] + args
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError(f"Error ejecutando {' '.join(args)}:\n{stderr.decode()}")
-    return stdout.decode().strip()
+def _generate_local_license() -> str:
+    alphabet = string.ascii_letters + string.digits
+    random_part = ''.join(secrets.choice(alphabet) for _ in range(24))
+    hmac_sig = hmac.new(b"tempus-ddb-hmac-secret-key-v1-2026", random_part.encode('utf-8'), hashlib.sha256).hexdigest()
+    return f"tmb_live_{random_part}_{hmac_sig}"
+
+LOCAL_LICENSE = _generate_local_license()
 
 
 # ── Input validation helpers (H4) ─────────────────────────────────────
@@ -182,13 +178,13 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "tempus_init":
-            db = validate_path(arguments.get("db", "tempus_ddb.db"))
-            output = await run_cmd_async(["init", "--db", db])
-            return [TextContent(type="text", text=f"Database initialized: {db}")]
+            db_path = validate_path(arguments.get("db", "tempus_ddb.db"))
+            db = tempus_ddb.TempusDDB(LOCAL_LICENSE, db_path, "keys.json")
+            return [TextContent(type="text", text=f"Database initialized: {db_path}")]
 
         elif name == "tempus_gen_keys":
             output_file = validate_path(arguments.get("output", "keys.json"))
-            output = await run_cmd_async(["gen-keys", "--output", output_file])
+            output = tempus_ddb.gen_keys(output_file)
             return [TextContent(type="text", text=f"Keys generated at {output_file}:\n{output}")]
 
         elif name == "tempus_record":
@@ -216,13 +212,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     }
                     return [TextContent(type="text", text=json.dumps(error_response, indent=2))]
 
-                args_list = ["record", "--db", db, "--payload", payload, "--rules", rules, "--keyfile", keyfile]
-                if arguments.get("parent"):
-                    args_list.extend(["--parent", arguments["parent"]])
-                if arguments.get("genesis"):
-                    args_list.append("--genesis")
-
-                output = await run_cmd_async(args_list)
+                genesis = arguments.get("genesis", False)
+                db_instance = tempus_ddb.TempusDDB(LOCAL_LICENSE, db, keyfile)
+                output = db_instance.record(payload, rules, genesis)
 
                 # Deduct funds
                 wallet["balance_usdc"] -= COST_PER_RECORD
@@ -231,8 +223,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=f"Record successful. Remaining balance: {wallet['balance_usdc']:.2f} USDC.\nOutput:\n{output}")]
 
         elif name == "tempus_validate":
-            db = validate_path(arguments.get("db", "tempus_ddb.db"))
-            output = await run_cmd_async(["validate", "--db", db])
+            db_path = validate_path(arguments.get("db", "tempus_ddb.db"))
+            db = tempus_ddb.TempusDDB(LOCAL_LICENSE, db_path, "keys.json")
+            output = db.validate()
             return [TextContent(type="text", text=output)]
 
         elif name == "tempus_fund_wallet":
@@ -261,8 +254,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
         err_msg = str(e)
-        if isinstance(e, RuntimeError) and "Error ejecutando" in err_msg:
-            return [TextContent(type="text", text="Error: Subprocess command failed.")]
         return [TextContent(type="text", text=f"Error executing tool {name}: {err_msg}")]
 
 async def main():

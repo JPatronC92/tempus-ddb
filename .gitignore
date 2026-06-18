@@ -3,3 +3,4 @@
 *.json
 tempus_sdk/
 __pycache__/
+server_secret.key

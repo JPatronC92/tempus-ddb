@@ -12,11 +12,23 @@ for f in [db_path, keys_path]:
     if os.path.exists(f):
         os.remove(f)
 
+import secrets
+import string
+import hmac
+import hashlib
+
+def _generate_local_license() -> str:
+    alphabet = string.ascii_letters + string.digits
+    random_part = ''.join(secrets.choice(alphabet) for _ in range(24))
+    hmac_sig = hmac.new(b"tempus-ddb-hmac-secret-key-v1-2026", random_part.encode('utf-8'), hashlib.sha256).hexdigest()
+    return f"tmb_live_{random_part}_{hmac_sig}"
+
 # Inicializamos (asegúrate de que tu Rust genere las keys si no existen, o genéralas antes)
-# Nota: payload y rules se enviaban como json strings o dicts? En lib.rs pusimos &str
-# El usuario provee dicts en su script ("payload = {'accion': 'lectura', 'sensor': i}")
-# Así que hay que convertirlos a JSON si el binding espera &str
-db = TempusDDB("tmb_live_1234567890abcdefghij", db_path, keys_path)
+import tempus_ddb
+if not os.path.exists(keys_path):
+    tempus_ddb.gen_keys(keys_path)
+
+db = TempusDDB(_generate_local_license(), db_path, keys_path)
 
 print("🔥 Iniciando benchmark de 1,000 decisiones inmutables...")
 start_time = time.time()
