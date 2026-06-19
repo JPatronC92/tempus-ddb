@@ -4,6 +4,7 @@
 tempus_sdk/
 __pycache__/
 .venv*
+.env
 server_secret.key
 keys.json
 agent_wallet.json

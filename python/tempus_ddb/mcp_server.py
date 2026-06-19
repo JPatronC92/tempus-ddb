@@ -10,6 +10,9 @@ import time
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ── Global configuration ──────────────────────────────────────────────
 SANDBOX_DIR = os.path.realpath(os.getcwd())
@@ -44,7 +47,8 @@ def _compute_hmac(agents_dict) -> str:
             "balance_usdc": float(info["balance_usdc"]),
             "reserved_balance_usdc": float(info.get("reserved_balance_usdc", 0.0)),
             "economic_events": info.get("economic_events", []),
-            "idempotency_keys": info.get("idempotency_keys", {})
+            "idempotency_keys": info.get("idempotency_keys", {}),
+            "used_funding_txs": info.get("used_funding_txs", [])
         }
     msg = json.dumps(canonical_data, sort_keys=True).encode()
     return hmac.new(_SERVER_SECRET, msg, hashlib.sha256).hexdigest()
@@ -387,10 +391,12 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "amount": {"type": "number", "description": "Amount to fund in USDC"},
-                    "agent_id": {"type": "string", "description": "Agent identifier."}
+                    "amount": {"type": "number", "description": "Amount to fund in USDC (used in demo mode)."},
+                    "agent_id": {"type": "string", "description": "Agent identifier."},
+                    "tx_hash": {"type": "string", "description": "Transaction hash on the blockchain (required for web3-testnet mode)."},
+                    "network": {"type": "string", "description": "Blockchain network (e.g. 'base-sepolia')."}
                 },
-                "required": ["amount"]
+                "required": []
             }
         ),
         Tool(
@@ -576,10 +582,36 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "tempus_fund_wallet":
             agent_id = arguments.get("agent_id", "default_agent")
-            amount = decimal.Decimal(str(arguments["amount"]))
-            # ── Reject non-positive amounts ──
-            if amount <= 0:
-                raise ValueError("Funding amount must be a positive number.")
+            
+            if TEMPUS_MODE == "web3-testnet":
+                tx_hash = arguments.get("tx_hash")
+                network = arguments.get("network", "base-sepolia")
+                if not tx_hash:
+                    raise ValueError("TEMPUS_MISSING_TX_HASH: 'tx_hash' is required in web3-testnet mode.")
+                
+                async with _wallet_lock:
+                    wallet = load_wallet()
+                    agent_info = get_or_create_agent(wallet, agent_id)
+                    used_txs = agent_info.get("used_funding_txs", [])
+                    if tx_hash in used_txs:
+                        raise ValueError(f"TEMPUS_DUPLICATE_FUNDING_TX: Transaction {tx_hash} has already been used.")
+
+                from .web3_adapter import Web3PaymentAdapter
+                adapter = Web3PaymentAdapter()
+                amount_val = await adapter.verify_funding_tx(network, tx_hash)
+                amount = decimal.Decimal(str(amount_val))
+                
+                async with _wallet_lock:
+                    wallet = load_wallet()
+                    agent_info = get_or_create_agent(wallet, agent_id)
+                    agent_info.setdefault("used_funding_txs", []).append(tx_hash)
+                    save_wallet(wallet)
+            else:
+                if "amount" not in arguments:
+                    raise ValueError("TEMPUS_MISSING_AMOUNT: 'amount' is required in demo mode.")
+                amount = decimal.Decimal(str(arguments["amount"]))
+                if amount <= 0:
+                    raise ValueError("Funding amount must be a positive number.")
 
             await _PAYMENT_ADAPTER.add_funds(agent_id, amount)
             balance_info = await _PAYMENT_ADAPTER.get_balance(agent_id)

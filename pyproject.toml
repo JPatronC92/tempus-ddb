@@ -13,7 +13,9 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "mcp"
+    "mcp",
+    "web3",
+    "python-dotenv"
 ]
 
 [project.scripts]
