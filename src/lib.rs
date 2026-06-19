@@ -627,7 +627,7 @@ pub fn gen_keys(output: String) -> PyResult<String> {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[pymodule]
-fn tempus_ddb(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _tempus_ddb(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TempusDDB>()?;
     m.add_function(wrap_pyfunction!(gen_keys, m)?)?;
     Ok(())

@@ -140,7 +140,7 @@ async def main():
     # Parámetros para conectarse al servidor MCP local de Tempus DDB usando el ejecutable actual de python
     server_params = StdioServerParameters(
         command=sys.executable,
-        args=["mcp_server.py"],
+        args=["-m", "tempus_ddb.mcp_server"],
         env=os.environ.copy()
     )
 

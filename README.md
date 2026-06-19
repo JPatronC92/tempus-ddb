@@ -15,14 +15,52 @@ Tempus DDB is a decentralized, immutable decision ledger designed specifically f
 - **MCP Server (Python)**: Acts as the integration layer. Exposes tools like `tempus_record` and `tempus_validate`. Handles the crypto paywall simulation and errors.
 - **Agent Instructions**: Self-healing documentation (`AGENT_INSTRUCTIONS.md`) designed to be read by LLMs to learn how to bypass the paywall autonomously.
 
-## Getting Started
+## Getting Started (CLI)
 
-Agents can connect to the MCP server directly using stdio:
+Tempus DDB v0.4.0-b2a-package includes a full CLI and a Python package that bundles the native Rust core and the MCP server.
+
+### Installation
+
 ```bash
-python mcp_server.py
+git clone https://github.com/JPatronC92/tempus-ddb.git
+cd tempus-ddb
+pip install .
 ```
 
-For detailed agent instructions, refer to `AGENT_INSTRUCTIONS.md`.
+### Quick Start
+
+Initialize your local files (does not overwrite existing keys/database):
+```bash
+tempus init
+```
+
+Run the interactive B2A mock agent demo:
+```bash
+tempus demo b2a
+```
+
+Start the MCP server directly using stdio:
+```bash
+tempus mcp start
+```
+
+### MCP Client Configuration
+
+To configure Tempus DDB in your favorite MCP client (like Claude Desktop or the MCP Inspector), add the following to your configuration file:
+
+```json
+{
+  "mcpServers": {
+    "tempus-ddb": {
+      "command": "tempus",
+      "args": ["mcp", "start"],
+      "env": {
+        "TEMPUS_MODE": "demo"
+      }
+    }
+  }
+}
+```
 
 ## Roadmap
 

@@ -30,7 +30,7 @@ class TestB2ALocal(unittest.IsolatedAsyncioTestCase):
         cleanup()
         server_params = StdioServerParameters(
             command=sys.executable,
-            args=["mcp_server.py"],
+            args=["-m", "tempus_ddb.mcp_server"],
             env=os.environ.copy()
         )
         async with stdio_client(server_params) as (read, write):

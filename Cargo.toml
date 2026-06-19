@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "tempus_ddb"
+name = "_tempus_ddb"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

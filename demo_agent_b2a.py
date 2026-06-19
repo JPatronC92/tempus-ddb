@@ -33,7 +33,7 @@ async def run_b2a_agent_demo():
     # Configuration for launching the local stdio MCP server using sys.executable
     server_params = StdioServerParameters(
         command=sys.executable,
-        args=["mcp_server.py"],
+        args=["-m", "tempus_ddb.mcp_server"],
         env=os.environ.copy()
     )
 

@@ -12,8 +12,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 # ── Global configuration ──────────────────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SANDBOX_DIR = os.path.realpath(BASE_DIR)
+SANDBOX_DIR = os.path.realpath(os.getcwd())
 WALLET_FILE = os.path.join(SANDBOX_DIR, "agent_wallet.json")
 SECRET_KEY_FILE = os.path.join(SANDBOX_DIR, "server_secret.key")
 COST_PER_RECORD = decimal.Decimal("0.01")
@@ -649,12 +648,19 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=json.dumps(error_response, indent=2))]
 
 async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream,
-            write_stream,
-            app.create_initialization_options()
-        )
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            await app.run(
+                read_stream,
+                write_stream,
+                app.create_initialization_options()
+            )
+    except KeyboardInterrupt:
+        pass
+
+def main_sync():
+    """Entry point for the tempus-mcp console script."""
+    asyncio.run(main())
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main_sync()
