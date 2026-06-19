@@ -1,8 +1,14 @@
 import asyncio
 import os
 import json
+import sys
+import io
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+
+# Force stdout to use utf-8 to prevent UnicodeEncodeError on Windows
+if sys.platform.startswith('win'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # Si tienes una API key de Anthropic, instálala usando `pip install anthropic` y exponse:
 # export ANTHROPIC_API_KEY="sk-ant-..."
@@ -131,9 +137,9 @@ async def run_anthropic_agent(session, mcp_tools):
                 })
 
 async def main():
-    # Parámetros para conectarse al servidor MCP local de Tempus DDB
+    # Parámetros para conectarse al servidor MCP local de Tempus DDB usando el ejecutable actual de python
     server_params = StdioServerParameters(
-        command="/data/data/com.termux/files/home/tempus-ddb/.venv/bin/python",
+        command=sys.executable,
         args=["mcp_server.py"],
         env=os.environ.copy()
     )
@@ -143,6 +149,8 @@ async def main():
         os.remove("agent_wallet.json")
     if os.path.exists("agent.db"):
         os.remove("agent.db")
+    if os.path.exists("my_keys.json"):
+        os.remove("my_keys.json")
 
     print("🔌 Conectando al Servidor MCP de Tempus DDB...")
     async with stdio_client(server_params) as (read, write):

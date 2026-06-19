@@ -1,3 +1,14 @@
+# ============================================================================
+# ⚠️  LEGACY / ENTERPRISE ONLY — NOT USED IN B2A
+# ============================================================================
+#
+# This script is part of the legacy B2B Enterprise Licensing system.
+# The modern B2A (Business-to-Agent) workflow uses autonomous local/demo
+# wallets with paywalls, which do NOT require dynamic license key generation.
+#
+# Keep for enterprise compatibility only.
+# ============================================================================
+
 import argparse
 import secrets
 import string
