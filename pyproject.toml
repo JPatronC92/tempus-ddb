@@ -4,8 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "tempus_ddb"
-version = "0.2.0-dev"
-description = "The Tamper-Proof Flight Recorder for AI Agents"
+version = "0.2.0"
+description = "Free, local-first, tamper-evident decision ledger for AI agents"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
@@ -13,7 +13,7 @@ authors = [
     {name = "Tempus DDB Contributors"}
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Rust",
@@ -26,7 +26,7 @@ dependencies = [
     "mcp",
     "python-dotenv"
 ]
-keywords = ["ai", "agents", "ledger", "audit", "cryptography", "mcp"]
+keywords = ["ai", "agents", "ledger", "audit", "cryptography", "mcp", "tamper-evident"]
 
 [project.scripts]
 tempus = "tempus_ddb.cli:main"
