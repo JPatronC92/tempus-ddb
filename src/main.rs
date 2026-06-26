@@ -29,23 +29,23 @@ enum Commands {
     Record {
         #[arg(long, default_value = "tempus_ddb.db")]
         db: String,
-        
+
         /// JSON payload representing inputs/outputs/decisions
         #[arg(long)]
         payload: String,
-        
+
         /// JSON rules or rule ID representing the logic applied
         #[arg(long)]
         rules: String,
-        
+
         /// Path to the keys.json file containing the actor's private key
         #[arg(long, default_value = "keys.json")]
         keyfile: String,
-        
+
         /// ID of the parent decision. If omitted, links to the last recorded decision.
         #[arg(long)]
         parent: Option<String>,
-        
+
         /// Forces recording this as a genesis decision (no parent required)
         #[arg(long)]
         genesis: bool,
@@ -59,7 +59,7 @@ enum Commands {
     List {
         #[arg(long, default_value = "tempus_ddb.db")]
         db: String,
-        
+
         #[arg(long)]
         limit: Option<usize>,
     },
@@ -96,7 +96,7 @@ fn calculate_canonical_hash(
     rules_evaluated: &str,
 ) -> [u8; 32] {
     use sha2::{Digest, Sha256};
-    
+
     #[derive(Serialize)]
     struct CanonicalPayload<'a> {
         parent_id: &'a str,
@@ -106,8 +106,10 @@ fn calculate_canonical_hash(
         rules_evaluated: serde_json::Value,
     }
 
-    let payload_val: serde_json::Value = serde_json::from_str(payload).unwrap_or(serde_json::Value::Null);
-    let rules_val: serde_json::Value = serde_json::from_str(rules_evaluated).unwrap_or(serde_json::Value::Null);
+    let payload_val: serde_json::Value =
+        serde_json::from_str(payload).unwrap_or(serde_json::Value::Null);
+    let rules_val: serde_json::Value =
+        serde_json::from_str(rules_evaluated).unwrap_or(serde_json::Value::Null);
 
     let canonical = CanonicalPayload {
         parent_id,
@@ -116,9 +118,9 @@ fn calculate_canonical_hash(
         payload: payload_val,
         rules_evaluated: rules_val,
     };
-    
+
     let canonical_bytes = serde_json::to_vec(&canonical).unwrap();
-    
+
     let mut hasher = Sha256::new();
     hasher.update(&canonical_bytes);
     hasher.finalize().into()
@@ -126,33 +128,34 @@ fn calculate_canonical_hash(
 
 fn verify_decision_signature(d: &Decision) -> Result<(), String> {
     use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-    
-    let pub_bytes = hex::decode(&d.actor_id)
-        .map_err(|e| format!("Invalid actor_id hex: {}", e))?;
-    let pub_array: [u8; 32] = pub_bytes.try_into()
-        .map_err(|_| "Actor public key must be exactly 32 bytes")?;
-    let verifying_key = VerifyingKey::from_bytes(&pub_array)
-        .map_err(|e| format!("Invalid public key: {}", e))?;
 
-    let sig_bytes = hex::decode(&d.signature)
-        .map_err(|e| format!("Invalid signature hex: {}", e))?;
-    let sig_array: [u8; 64] = sig_bytes.try_into()
+    let pub_bytes = hex::decode(&d.actor_id).map_err(|e| format!("Invalid actor_id hex: {}", e))?;
+    let pub_array: [u8; 32] = pub_bytes
+        .try_into()
+        .map_err(|_| "Actor public key must be exactly 32 bytes")?;
+    let verifying_key =
+        VerifyingKey::from_bytes(&pub_array).map_err(|e| format!("Invalid public key: {}", e))?;
+
+    let sig_bytes =
+        hex::decode(&d.signature).map_err(|e| format!("Invalid signature hex: {}", e))?;
+    let sig_array: [u8; 64] = sig_bytes
+        .try_into()
         .map_err(|_| "Signature must be exactly 64 bytes")?;
     let signature = Signature::from_bytes(&sig_array);
 
-    let id_bytes = hex::decode(&d.id)
-        .map_err(|e| format!("Invalid id hex: {}", e))?;
+    let id_bytes = hex::decode(&d.id).map_err(|e| format!("Invalid id hex: {}", e))?;
 
-    verifying_key.verify(&id_bytes, &signature)
+    verifying_key
+        .verify(&id_bytes, &signature)
         .map_err(|e| format!("Cryptographic signature is invalid: {}", e))?;
 
     Ok(())
 }
 
 fn init_db(db_path: &str) -> Result<Connection, String> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| format!("Failed to open SQLite database: {}", e))?;
-    
+    let conn =
+        Connection::open(db_path).map_err(|e| format!("Failed to open SQLite database: {}", e))?;
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS decisions (
             id TEXT PRIMARY KEY,
@@ -165,18 +168,21 @@ fn init_db(db_path: &str) -> Result<Connection, String> {
             signature TEXT NOT NULL
         );",
         [],
-    ).map_err(|e| format!("Failed to create decisions table: {}", e))?;
-    
+    )
+    .map_err(|e| format!("Failed to create decisions table: {}", e))?;
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_parent_id ON decisions (parent_id);",
         [],
-    ).map_err(|e| format!("Failed to create parent index: {}", e))?;
-    
+    )
+    .map_err(|e| format!("Failed to create parent index: {}", e))?;
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_causal_depth ON decisions (causal_depth);",
         [],
-    ).map_err(|e| format!("Failed to create causal depth index: {}", e))?;
-    
+    )
+    .map_err(|e| format!("Failed to create causal depth index: {}", e))?;
+
     Ok(conn)
 }
 
@@ -187,9 +193,14 @@ fn get_last_decision(conn: &Connection) -> Result<Option<Decision>, String> {
          ORDER BY causal_depth DESC, timestamp DESC 
          LIMIT 1"
     ).map_err(|e| format!("Failed to prepare select statement: {}", e))?;
-    
-    let mut rows = stmt.query([]).map_err(|e| format!("Failed to query database: {}", e))?;
-    if let Some(row) = rows.next().map_err(|e| format!("Error advancing row: {}", e))? {
+
+    let mut rows = stmt
+        .query([])
+        .map_err(|e| format!("Failed to query database: {}", e))?;
+    if let Some(row) = rows
+        .next()
+        .map_err(|e| format!("Error advancing row: {}", e))?
+    {
         Ok(Some(Decision {
             id: row.get(0).map_err(|e| e.to_string())?,
             parent_id: row.get(1).map_err(|e| e.to_string())?,
@@ -211,9 +222,14 @@ fn get_decision(conn: &Connection, id: &str) -> Result<Option<Decision>, String>
          FROM decisions 
          WHERE id = ?1"
     ).map_err(|e| format!("Failed to prepare select statement: {}", e))?;
-    
-    let mut rows = stmt.query([id]).map_err(|e| format!("Failed to query database: {}", e))?;
-    if let Some(row) = rows.next().map_err(|e| format!("Error advancing row: {}", e))? {
+
+    let mut rows = stmt
+        .query([id])
+        .map_err(|e| format!("Failed to query database: {}", e))?;
+    if let Some(row) = rows
+        .next()
+        .map_err(|e| format!("Error advancing row: {}", e))?
+    {
         Ok(Some(Decision {
             id: row.get(0).map_err(|e| e.to_string())?,
             parent_id: row.get(1).map_err(|e| e.to_string())?,
@@ -252,12 +268,13 @@ fn load_keypair(path: &str) -> Result<ed25519_dalek::SigningKey, String> {
         .map_err(|e| format!("Failed to read key file {}: {}", path, e))?;
     let config: KeyPairConfig = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse key file JSON: {}", e))?;
-    
-    let private_key_bytes = hex::decode(&config.private_key)
-        .map_err(|e| format!("Invalid private key hex: {}", e))?;
-    let private_key_array: [u8; 32] = private_key_bytes.try_into()
+
+    let private_key_bytes =
+        hex::decode(&config.private_key).map_err(|e| format!("Invalid private key hex: {}", e))?;
+    let private_key_array: [u8; 32] = private_key_bytes
+        .try_into()
         .map_err(|_| "Private key must be exactly 32 bytes")?;
-        
+
     let signing_key = ed25519_dalek::SigningKey::from_bytes(&private_key_array);
     Ok(signing_key)
 }
@@ -266,17 +283,15 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { db } => {
-            match init_db(&db) {
-                Ok(_) => {
-                    eprintln!("Database initialized successfully: {}", db);
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
+        Commands::Init { db } => match init_db(&db) {
+            Ok(_) => {
+                eprintln!("Database initialized successfully: {}", db);
             }
-        }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
         Commands::GenKeys { output } => {
             use rand::rngs::OsRng;
             let mut csprng = OsRng;
@@ -312,9 +327,13 @@ fn main() {
             }
 
             eprintln!("Cryptographic keys generated and saved to: {}", output);
-            println!("{}", serde_json::to_string(&serde_json::json!({
-                "public_key": config.public_key
-            })).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::json!({
+                    "public_key": config.public_key
+                }))
+                .unwrap()
+            );
         }
         Commands::Record {
             db,
@@ -354,7 +373,8 @@ fn main() {
                 }
             };
 
-            let tx = match conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate) {
+            let tx = match conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            {
                 Ok(t) => t,
                 Err(e) => {
                     eprintln!("Error starting transaction: {}", e);
@@ -385,7 +405,7 @@ fn main() {
                         } else {
                             (last_d.id, last_d.causal_depth + 1)
                         }
-                    },
+                    }
                     Ok(None) => {
                         if genesis {
                             ("genesis".to_string(), 0)
@@ -402,7 +422,9 @@ fn main() {
             };
 
             if parent_id == "genesis" {
-                let mut stmt = tx.prepare("SELECT 1 FROM decisions WHERE parent_id = 'genesis' LIMIT 1").unwrap();
+                let mut stmt = tx
+                    .prepare("SELECT 1 FROM decisions WHERE parent_id = 'genesis' LIMIT 1")
+                    .unwrap();
                 let exists = stmt.exists([]).unwrap_or(false);
                 if exists {
                     eprintln!("Error: A genesis decision already exists in the database.");
@@ -417,7 +439,8 @@ fn main() {
                 .as_micros() as u64;
 
             // Generate deterministic SHA-256 hash
-            let hash_bytes = calculate_canonical_hash(&parent_id, &actor_id, timestamp, &payload, &rules);
+            let hash_bytes =
+                calculate_canonical_hash(&parent_id, &actor_id, timestamp, &payload, &rules);
             let id = hex::encode(hash_bytes);
 
             // Cryptographic signing of the ID hash
@@ -503,11 +526,15 @@ fn main() {
             }
 
             if decisions.is_empty() {
-                println!("{}", serde_json::to_string(&serde_json::json!({
-                    "status": "valid",
-                    "message": "Database is empty.",
-                    "total_records": 0
-                })).unwrap());
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({
+                        "status": "valid",
+                        "message": "Database is empty.",
+                        "total_records": 0
+                    }))
+                    .unwrap()
+                );
                 return;
             }
 
@@ -526,7 +553,7 @@ fn main() {
                     &d.actor_id,
                     d.timestamp,
                     &d.payload,
-                    &d.rules_evaluated
+                    &d.rules_evaluated,
                 );
                 let computed_id = hex::encode(computed_hash);
                 if computed_id != d.id {
@@ -539,7 +566,10 @@ fn main() {
 
                 // B. Validate cryptographic signature
                 if let Err(e) = verify_decision_signature(d) {
-                    errors.push(format!("Decision '{}' signature verification failed: {}", d.id, e));
+                    errors.push(format!(
+                        "Decision '{}' signature verification failed: {}",
+                        d.id, e
+                    ));
                     continue;
                 }
 
@@ -581,17 +611,25 @@ fn main() {
             }
 
             if errors.is_empty() {
-                println!("{}", serde_json::to_string(&serde_json::json!({
-                    "status": "valid",
-                    "message": "All decisions verified successfully.",
-                    "total_records": decisions.len()
-                })).unwrap());
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({
+                        "status": "valid",
+                        "message": "All decisions verified successfully.",
+                        "total_records": decisions.len()
+                    }))
+                    .unwrap()
+                );
             } else {
-                println!("{}", serde_json::to_string(&serde_json::json!({
-                    "status": "invalid",
-                    "errors": errors,
-                    "total_records": decisions.len()
-                })).unwrap());
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({
+                        "status": "invalid",
+                        "errors": errors,
+                        "total_records": decisions.len()
+                    }))
+                    .unwrap()
+                );
                 std::process::exit(1);
             }
         }

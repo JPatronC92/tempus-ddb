@@ -1,20 +1,12 @@
 #[cfg(not(target_arch = "wasm32"))]
-use pyo3::prelude::*;
+use pyo3::exceptions::{PyIOError, PyPermissionError, PyRuntimeError};
 #[cfg(not(target_arch = "wasm32"))]
-use pyo3::exceptions::{PyPermissionError, PyRuntimeError, PyIOError};
+use pyo3::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 // --- 1. PATRÓN STORAGE LAYER (TRAIT) ---
-
-/// Verify a license key using HMAC-SHA256.
-///
-/// Expected format: `tmb_live_{random_part}_{hmac_hex_signature}`
-///
-/// The HMAC is computed over the random_part using LICENSE_SECRET.
-/// Both the prefix and the cryptographic signature must be valid.
-
 
 // --- 2. PATRÓN STORAGE LAYER (TRAIT) ---
 pub trait StorageLayer {
@@ -23,7 +15,7 @@ pub trait StorageLayer {
     fn export_ledger(&self) -> Result<String, String>;
 }
 
-// Implementación en Memoria (Para el Ecosistema WASM / JS)
+// Experimental WASM support: in-memory stub storage only, not persistent ledger storage.
 #[cfg(target_arch = "wasm32")]
 pub struct MemoryStorage {
     records: Vec<String>,
@@ -33,7 +25,7 @@ pub struct MemoryStorage {
 #[cfg(target_arch = "wasm32")]
 impl MemoryStorage {
     pub fn new() -> Self {
-        Self { 
+        Self {
             records: Vec::new(),
             latest_hash: "GENESIS_HASH_MEM".to_string(),
         }
@@ -42,7 +34,12 @@ impl MemoryStorage {
 
 #[cfg(target_arch = "wasm32")]
 impl StorageLayer for MemoryStorage {
-    fn insert_decision(&mut self, payload: &str, _rules: &str, genesis: bool) -> Result<(), String> {
+    fn insert_decision(
+        &mut self,
+        payload: &str,
+        _rules: &str,
+        genesis: bool,
+    ) -> Result<(), String> {
         self.records.push(payload.to_string());
         if genesis {
             self.latest_hash = "GENESIS_HASH_MEM".to_string();
@@ -67,7 +64,7 @@ impl StorageLayer for MemoryStorage {
 use rusqlite::Connection;
 
 #[cfg(not(target_arch = "wasm32"))]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[cfg(not(target_arch = "wasm32"))]
 use sha2::{Digest, Sha256};
@@ -112,17 +109,20 @@ impl SqliteStorage {
                 signature TEXT NOT NULL
             );",
             [],
-        ).map_err(|e| format!("Failed to create decisions table: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to create decisions table: {}", e))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_parent_id ON decisions (parent_id);",
             [],
-        ).map_err(|e| format!("Failed to create parent index: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to create parent index: {}", e))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_causal_depth ON decisions (causal_depth);",
             [],
-        ).map_err(|e| format!("Failed to create causal depth index: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to create causal depth index: {}", e))?;
 
         Ok(Self { conn, keyfile })
     }
@@ -143,7 +143,8 @@ impl SqliteStorage {
 
         let private_key_bytes = hex::decode(&config.private_key)
             .map_err(|e| format!("Invalid private key hex: {}", e))?;
-        let private_key_array: [u8; 32] = private_key_bytes.try_into()
+        let private_key_array: [u8; 32] = private_key_bytes
+            .try_into()
             .map_err(|_| "Private key must be exactly 32 bytes".to_string())?;
 
         Ok(ed25519_dalek::SigningKey::from_bytes(&private_key_array))
@@ -166,8 +167,10 @@ impl SqliteStorage {
             rules_evaluated: serde_json::Value,
         }
 
-        let payload_val: serde_json::Value = serde_json::from_str(payload).unwrap_or(serde_json::Value::Null);
-        let rules_val: serde_json::Value = serde_json::from_str(rules_evaluated).unwrap_or(serde_json::Value::Null);
+        let payload_val: serde_json::Value =
+            serde_json::from_str(payload).unwrap_or(serde_json::Value::Null);
+        let rules_val: serde_json::Value =
+            serde_json::from_str(rules_evaluated).unwrap_or(serde_json::Value::Null);
 
         let canonical = CanonicalPayload {
             parent_id,
@@ -176,7 +179,7 @@ impl SqliteStorage {
             payload: payload_val,
             rules_evaluated: rules_val,
         };
-        
+
         let canonical_bytes = serde_json::to_vec(&canonical).unwrap();
 
         let mut hasher = Sha256::new();
@@ -192,8 +195,13 @@ impl SqliteStorage {
              LIMIT 1"
         ).map_err(|e| format!("Failed to prepare select statement: {}", e))?;
 
-        let mut rows = stmt.query([]).map_err(|e| format!("Failed to query database: {}", e))?;
-        if let Some(row) = rows.next().map_err(|e| format!("Error advancing row: {}", e))? {
+        let mut rows = stmt
+            .query([])
+            .map_err(|e| format!("Failed to query database: {}", e))?;
+        if let Some(row) = rows
+            .next()
+            .map_err(|e| format!("Error advancing row: {}", e))?
+        {
             Ok(Some(Decision {
                 id: row.get(0).map_err(|e| e.to_string())?,
                 parent_id: row.get(1).map_err(|e| e.to_string())?,
@@ -209,6 +217,7 @@ impl SqliteStorage {
         }
     }
 
+    #[allow(dead_code)]
     fn get_last_decision(&self) -> Result<Option<Decision>, String> {
         Self::get_last_decision_conn(&self.conn)
     }
@@ -220,18 +229,20 @@ impl SqliteStorage {
              ORDER BY causal_depth ASC, timestamp ASC"
         ).map_err(|e| format!("Failed to prepare select statement: {}", e))?;
 
-        let rows = stmt.query_map([], |row| {
-            Ok(Decision {
-                id: row.get(0)?,
-                parent_id: row.get(1)?,
-                causal_depth: row.get(2)?,
-                actor_id: row.get(3)?,
-                timestamp: row.get(4)?,
-                payload: row.get(5)?,
-                rules_evaluated: row.get(6)?,
-                signature: row.get(7)?,
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(Decision {
+                    id: row.get(0)?,
+                    parent_id: row.get(1)?,
+                    causal_depth: row.get(2)?,
+                    actor_id: row.get(3)?,
+                    timestamp: row.get(4)?,
+                    payload: row.get(5)?,
+                    rules_evaluated: row.get(6)?,
+                    signature: row.get(7)?,
+                })
             })
-        }).map_err(|e| format!("Failed to execute query: {}", e))?;
+            .map_err(|e| format!("Failed to execute query: {}", e))?;
 
         let mut decisions = Vec::new();
         for r in rows {
@@ -246,7 +257,8 @@ impl SqliteStorage {
                 "status": "valid",
                 "message": "Database is empty.",
                 "total_records": 0
-            })).unwrap());
+            }))
+            .unwrap());
         }
 
         use std::collections::HashMap;
@@ -263,7 +275,7 @@ impl SqliteStorage {
                 &d.actor_id,
                 d.timestamp,
                 &d.payload,
-                &d.rules_evaluated
+                &d.rules_evaluated,
             );
             let computed_id = hex::encode(computed_hash);
             if computed_id != d.id {
@@ -277,34 +289,55 @@ impl SqliteStorage {
             use ed25519_dalek::{Signature, Verifier, VerifyingKey};
             let pub_bytes = match hex::decode(&d.actor_id) {
                 Ok(b) => b,
-                Err(e) => { errors.push(format!("Invalid actor_id: {}", e)); continue; }
+                Err(e) => {
+                    errors.push(format!("Invalid actor_id: {}", e));
+                    continue;
+                }
             };
             let pub_array: [u8; 32] = match pub_bytes.try_into() {
                 Ok(a) => a,
-                Err(_) => { errors.push("Invalid public key size".to_string()); continue; }
+                Err(_) => {
+                    errors.push("Invalid public key size".to_string());
+                    continue;
+                }
             };
             let verifying_key = match VerifyingKey::from_bytes(&pub_array) {
                 Ok(k) => k,
-                Err(e) => { errors.push(format!("Invalid public key: {}", e)); continue; }
+                Err(e) => {
+                    errors.push(format!("Invalid public key: {}", e));
+                    continue;
+                }
             };
 
             let sig_bytes = match hex::decode(&d.signature) {
                 Ok(b) => b,
-                Err(e) => { errors.push(format!("Invalid signature hex: {}", e)); continue; }
+                Err(e) => {
+                    errors.push(format!("Invalid signature hex: {}", e));
+                    continue;
+                }
             };
             let sig_array: [u8; 64] = match sig_bytes.try_into() {
                 Ok(a) => a,
-                Err(_) => { errors.push("Invalid signature size".to_string()); continue; }
+                Err(_) => {
+                    errors.push("Invalid signature size".to_string());
+                    continue;
+                }
             };
             let signature = Signature::from_bytes(&sig_array);
 
             let id_bytes = match hex::decode(&d.id) {
                 Ok(b) => b,
-                Err(e) => { errors.push(format!("Invalid id hex: {}", e)); continue; }
+                Err(e) => {
+                    errors.push(format!("Invalid id hex: {}", e));
+                    continue;
+                }
             };
 
             if let Err(e) = verifying_key.verify(&id_bytes, &signature) {
-                errors.push(format!("Decision '{}' signature verification failed: {}", d.id, e));
+                errors.push(format!(
+                    "Decision '{}' signature verification failed: {}",
+                    d.id, e
+                ));
                 continue;
             }
 
@@ -314,7 +347,9 @@ impl SqliteStorage {
                         if d.causal_depth != parent.causal_depth + 1 {
                             errors.push(format!(
                                 "Decision '{}' causal depth mismatch. Expected '{}', found '{}'",
-                                d.id, parent.causal_depth + 1, d.causal_depth
+                                d.id,
+                                parent.causal_depth + 1,
+                                d.causal_depth
                             ));
                         }
                         if d.timestamp < parent.timestamp {
@@ -325,12 +360,18 @@ impl SqliteStorage {
                         }
                     }
                     None => {
-                        errors.push(format!("Decision '{}' orphan node. Parent '{}' missing", d.id, d.parent_id));
+                        errors.push(format!(
+                            "Decision '{}' orphan node. Parent '{}' missing",
+                            d.id, d.parent_id
+                        ));
                     }
                 }
             } else {
                 if d.causal_depth != 0 {
-                    errors.push(format!("Genesis decision '{}' must have causal_depth 0", d.id));
+                    errors.push(format!(
+                        "Genesis decision '{}' must have causal_depth 0",
+                        d.id
+                    ));
                 }
             }
         }
@@ -340,13 +381,15 @@ impl SqliteStorage {
                 "status": "valid",
                 "message": "All decisions verified successfully.",
                 "total_records": decisions.len()
-            })).unwrap())
+            }))
+            .unwrap())
         } else {
             Err(serde_json::to_string(&serde_json::json!({
                 "status": "invalid",
                 "errors": errors,
                 "total_records": decisions.len()
-            })).unwrap())
+            }))
+            .unwrap())
         }
     }
 }
@@ -365,7 +408,9 @@ impl StorageLayer for SqliteStorage {
         let verifying_key = signing_key.verifying_key();
         let actor_id = hex::encode(verifying_key.to_bytes());
 
-        let tx = self.conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        let tx = self
+            .conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
         // Resolve parent_id and causal_depth
@@ -382,16 +427,19 @@ impl StorageLayer for SqliteStorage {
                 if genesis {
                     ("genesis".to_string(), 0u64)
                 } else {
-                    return Err("Database is empty. Use genesis=true to record the first decision.".to_string());
+                    return Err(
+                        "Database is empty. Use genesis=true to record the first decision."
+                            .to_string(),
+                    );
                 }
             }
         };
 
         if parent_id == "genesis" {
-            let mut stmt = tx.prepare("SELECT 1 FROM decisions WHERE parent_id = 'genesis' LIMIT 1")
+            let mut stmt = tx
+                .prepare("SELECT 1 FROM decisions WHERE parent_id = 'genesis' LIMIT 1")
                 .map_err(|e| format!("Prepare error: {}", e))?;
-            let exists = stmt.exists([])
-                .map_err(|e| format!("Query error: {}", e))?;
+            let exists = stmt.exists([]).map_err(|e| format!("Query error: {}", e))?;
             if exists {
                 return Err("A genesis decision already exists in the database.".to_string());
             }
@@ -404,7 +452,8 @@ impl StorageLayer for SqliteStorage {
             .as_micros() as u64;
 
         // Compute the deterministic SHA-256 hash
-        let hash_bytes = Self::calculate_canonical_hash(&parent_id, &actor_id, timestamp, payload, rules);
+        let hash_bytes =
+            Self::calculate_canonical_hash(&parent_id, &actor_id, timestamp, payload, rules);
         let id = hex::encode(hash_bytes);
 
         // Ed25519 signature of the hash
@@ -427,18 +476,25 @@ impl StorageLayer for SqliteStorage {
             ),
         ).map_err(|e| format!("Failed to insert decision into SQLite: {}", e))?;
 
-        tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
+        tx.commit()
+            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
         Ok(())
     }
 
     fn get_latest_hash(&self) -> Result<String, String> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id FROM decisions ORDER BY causal_depth DESC, timestamp DESC LIMIT 1"
-        ).map_err(|e| format!("Failed to prepare select statement: {}", e))?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM decisions ORDER BY causal_depth DESC, timestamp DESC LIMIT 1")
+            .map_err(|e| format!("Failed to prepare select statement: {}", e))?;
 
-        let mut rows = stmt.query([]).map_err(|e| format!("Failed to query database: {}", e))?;
-        if let Some(row) = rows.next().map_err(|e| format!("Error advancing row: {}", e))? {
+        let mut rows = stmt
+            .query([])
+            .map_err(|e| format!("Failed to query database: {}", e))?;
+        if let Some(row) = rows
+            .next()
+            .map_err(|e| format!("Error advancing row: {}", e))?
+        {
             let id: String = row.get(0).unwrap();
             Ok(id)
         } else {
@@ -453,18 +509,20 @@ impl StorageLayer for SqliteStorage {
              ORDER BY causal_depth ASC, timestamp ASC"
         ).map_err(|e| format!("Failed to prepare select statement: {}", e))?;
 
-        let rows = stmt.query_map([], |row| {
-            Ok(Decision {
-                id: row.get(0)?,
-                parent_id: row.get(1)?,
-                causal_depth: row.get(2)?,
-                actor_id: row.get(3)?,
-                timestamp: row.get(4)?,
-                payload: row.get(5)?,
-                rules_evaluated: row.get(6)?,
-                signature: row.get(7)?,
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(Decision {
+                    id: row.get(0)?,
+                    parent_id: row.get(1)?,
+                    causal_depth: row.get(2)?,
+                    actor_id: row.get(3)?,
+                    timestamp: row.get(4)?,
+                    payload: row.get(5)?,
+                    rules_evaluated: row.get(6)?,
+                    signature: row.get(7)?,
+                })
             })
-        }).map_err(|e| format!("Failed to execute query: {}", e))?;
+            .map_err(|e| format!("Failed to execute query: {}", e))?;
 
         let mut decisions = Vec::new();
         for r in rows {
@@ -494,13 +552,22 @@ impl TempusDDB {
     fn new(db_path: String, keyfile: String) -> PyResult<Self> {
         let storage = SqliteStorage::new(db_path, keyfile.clone())
             .map_err(|e| PyPermissionError::new_err(e))?;
+
+        if std::path::Path::new(&keyfile).exists() {
+            storage
+                .load_signing_key()
+                .map_err(PyPermissionError::new_err)?;
+        }
+
         Ok(TempusDDB { storage, keyfile })
     }
 
     #[allow(unused_variables)]
     #[pyo3(signature = (payload, rules, genesis=false))]
     fn record(&mut self, payload: &str, rules: &str, genesis: bool) -> PyResult<String> {
-        self.storage.insert_decision(payload, rules, genesis).map_err(|e| PyPermissionError::new_err(e))?;
+        self.storage
+            .insert_decision(payload, rules, genesis)
+            .map_err(|e| PyPermissionError::new_err(e))?;
 
         let result_json = format!(
             r#"{{"status": "success", "action": "recorded", "latest_hash": "{}"}}"#,
@@ -511,20 +578,24 @@ impl TempusDDB {
 
     #[pyo3(signature = ())]
     fn validate(&self) -> PyResult<String> {
-        self.storage.validate_ledger().map_err(|e| PyRuntimeError::new_err(e))
+        self.storage
+            .validate_ledger()
+            .map_err(|e| PyRuntimeError::new_err(e))
     }
 
     #[pyo3(signature = ())]
     fn export(&self) -> PyResult<String> {
-        self.storage.export_ledger().map_err(|e| PyRuntimeError::new_err(e))
+        self.storage
+            .export_ledger()
+            .map_err(|e| PyRuntimeError::new_err(e))
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[pyfunction]
 pub fn gen_keys(output: String) -> PyResult<String> {
-    use rand::rngs::OsRng;
     use ed25519_dalek::SigningKey;
+    use rand::rngs::OsRng;
     use std::fs::File;
     use std::io::Write;
 
@@ -591,7 +662,9 @@ impl TempusDDBWasm {
 
     #[wasm_bindgen]
     pub fn record(&mut self, payload: &str, rules: &str, genesis: bool) -> Result<String, JsValue> {
-        self.storage.insert_decision(payload, rules, genesis).map_err(|e| JsValue::from_str(&e))?;
+        self.storage
+            .insert_decision(payload, rules, genesis)
+            .map_err(|e| JsValue::from_str(&e))?;
 
         let result_json = format!(
             r#"{{"status": "success", "action": "recorded", "latest_hash": "{}"}}"#,
@@ -599,9 +672,11 @@ impl TempusDDBWasm {
         );
         Ok(result_json)
     }
-    
+
     #[wasm_bindgen]
     pub fn get_ledger(&self) -> Result<String, JsValue> {
-        self.storage.export_ledger().map_err(|e| JsValue::from_str(&e))
+        self.storage
+            .export_ledger()
+            .map_err(|e| JsValue::from_str(&e))
     }
 }

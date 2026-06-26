@@ -18,7 +18,7 @@ def run_init():
             gen_keys(keyfile)
             print(f"✓ Generated new Ed25519 keys → {keyfile}")
         except Exception as e:
-            print(f"✗ Failed to generate keys: {e}")
+            print(f"✗ Failed to generate keys: {e}", file=sys.stderr)
             sys.exit(1)
 
     if os.path.exists(db_path):
@@ -32,7 +32,7 @@ def run_init():
         print(f"  Keys:  {keyfile}")
         print(f"  DB:    {db_path}")
     except Exception as e:
-        print(f"✗ Failed to initialize database: {e}")
+        print(f"✗ Failed to initialize database: {e}", file=sys.stderr)
         sys.exit(1)
 
 def run_verify():
@@ -40,7 +40,7 @@ def run_verify():
     db_path = "tempus.db"
 
     if not os.path.exists(db_path):
-        print("✗ No database found. Run 'tempus init' first.")
+        print("✗ No database found. Run 'tempus init' first.", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -55,7 +55,7 @@ def run_verify():
             print("✓ Ledger validation successful.")
             print(result)
     except Exception as e:
-        print(f"✗ Validation failed: {e}")
+        print(f"✗ Validation failed: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -123,12 +123,12 @@ def run_record(args):
     db_path = args.db or "tempus.db"
 
     if not os.path.exists(keyfile):
-        print("✗ No keys found. Run 'tempus init' first.")
+        print("✗ No keys found. Run 'tempus init' first.", file=sys.stderr)
         sys.exit(1)
 
     if not os.path.exists(db_path) and not args.genesis:
         # For non-genesis, db should exist
-        print("✗ Database not found. You must create the first (genesis) record first.")
+        print("✗ Database not found. You must create the first (genesis) record first.", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -140,7 +140,7 @@ def run_record(args):
         try:
             json.loads(payload)
         except json.JSONDecodeError:
-            print("✗ --payload must be valid JSON (or path to JSON file)")
+            print("✗ --payload must be valid JSON (or path to JSON file)", file=sys.stderr)
             sys.exit(1)
 
         # Load rules
@@ -151,28 +151,22 @@ def run_record(args):
         try:
             json.loads(rules)
         except json.JSONDecodeError:
-            print("✗ --rules must be valid JSON (or path to JSON file)")
-            sys.exit(1)
-
-        # Validation for chaining
-        if not args.genesis and not args.parent:
-            print("✗ Non-genesis records require --parent <hash> (get it from previous record result or 'tempus status')")
+            print("✗ --rules must be valid JSON (or path to JSON file)", file=sys.stderr)
             sys.exit(1)
 
         db = TempusDDB(db_path, keyfile)
 
-        # Note: The Rust binding only supports `genesis`. Logical parent chaining
-        # should be included in the `payload` if needed for audit purposes.
+        # The core auto-links non-genesis records to the latest record.
         result = db.record(payload, rules, genesis=args.genesis)
         print("✓ Decision recorded successfully.")
         print(result)
     except Exception as e:
         err_msg = str(e)
-        if "parent" in err_msg.lower() or "genesis" in err_msg.lower():
-            print(f"✗ Chaining error: {err_msg}")
-            print("  Tip: Use --genesis for the first record, or provide --parent with the previous hash.")
+        if "genesis" in err_msg.lower() or "empty" in err_msg.lower():
+            print(f"✗ Chaining error: {err_msg}", file=sys.stderr)
+            print("  Tip: Use --genesis only for the first record. Later records auto-link to the latest record.", file=sys.stderr)
         else:
-            print(f"✗ Record failed: {err_msg}")
+            print(f"✗ Record failed: {err_msg}", file=sys.stderr)
         sys.exit(1)
 
 def run_version():
@@ -181,7 +175,7 @@ def run_version():
 def main():
     parser = argparse.ArgumentParser(
         prog="tempus",
-        description="Tempus DDB — The Tamper-Proof Flight Recorder for AI Agents"
+        description="Tempus DDB — The Tamper-Evident Flight Recorder for AI Agents"
     )
     parser.add_argument(
         "--version", action="store_true",

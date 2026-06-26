@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -69,22 +70,25 @@ def test_cli_record_genesis_and_verify(tmp_path):
 
 def test_cli_record_requires_payload_and_rules(tmp_path):
     run_cli(["init"], cwd=tmp_path)
-    code, _, err = run_cli(["record", "--payload", "{}", "--rules", ""], cwd=tmp_path)
+    code, out, err = run_cli(["record", "--payload", "{}", "--rules", ""], cwd=tmp_path)
+    combined = (out + err).lower()
     assert code != 0
-    assert "rules" in err.lower() or "required" in err.lower()
+    assert "rules" in combined or "required" in combined
 
 
 def test_cli_record_invalid_json(tmp_path):
     run_cli(["init"], cwd=tmp_path)
-    code, _, err = run_cli(["record", "--payload", "not-json", "--rules", '{}', "--genesis"], cwd=tmp_path)
+    code, out, err = run_cli(["record", "--payload", "not-json", "--rules", '{}', "--genesis"], cwd=tmp_path)
+    combined = (out + err).lower()
     assert code != 0
-    assert "json" in err.lower()
+    assert "json" in combined
 
 
 def test_cli_record_without_keys_fails(tmp_path):
-    code, _, err = run_cli(["record", "--payload", "{}", "--rules", "{}", "--genesis"], cwd=tmp_path)
+    code, out, err = run_cli(["record", "--payload", "{}", "--rules", "{}", "--genesis"], cwd=tmp_path)
+    combined = (out + err).lower()
     assert code != 0
-    assert "keys" in err.lower() or "init" in err.lower()
+    assert "keys" in combined or "init" in combined
 
 
 def test_cli_status_after_record(tmp_path):
@@ -96,11 +100,17 @@ def test_cli_status_after_record(tmp_path):
 
 
 def test_cli_record_multiple_and_verify(tmp_path):
-    run_cli(["init"], cwd=tmp_path)
-    run_cli(["record", "--payload", '{"step":1}', "--rules", "{}", "--genesis"], cwd=tmp_path)
-    run_cli(["record", "--payload", '{"step":2}', "--rules", "{}", "--genesis"], cwd=tmp_path)
-    code, out, _ = run_cli(["verify"], cwd=tmp_path)
-    assert code == 0
+    code_init, out_init, err_init = run_cli(["init"], cwd=tmp_path)
+    assert code_init == 0, out_init + err_init
+
+    code_1, out_1, err_1 = run_cli(["record", "--payload", '{"step":1}', "--rules", "{}", "--genesis"], cwd=tmp_path)
+    assert code_1 == 0, out_1 + err_1
+
+    code_2, out_2, err_2 = run_cli(["record", "--payload", '{"step":2}', "--rules", "{}"], cwd=tmp_path)
+    assert code_2 == 0, out_2 + err_2
+
+    code, out, err = run_cli(["verify"], cwd=tmp_path)
+    assert code == 0, out + err
     assert "total_records" in out or "valid" in out.lower()
 
 
@@ -122,10 +132,12 @@ def test_cli_verify_reports_error_on_corrupt(tmp_path):
     run_cli(["init"], cwd=tmp_path)
     run_cli(["record", "--payload", "{}", "--rules", "{}", "--genesis"], cwd=tmp_path)
     db = tmp_path / "tempus.db"
-    with open(db, "ab") as f:
-        f.write(b"corrupt")
-    code, out, _ = run_cli(["verify"], cwd=tmp_path)
-    assert code != 0 or "invalid" in out.lower() or "error" in out.lower()
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE decisions SET payload = ?", ('{"tampered":true}',))
+
+    code, out, err = run_cli(["verify"], cwd=tmp_path)
+    combined = (out + err).lower()
+    assert code != 0 or "invalid" in combined or "error" in combined or "mismatch" in combined
 
 
 def test_cli_status_shows_helpful_next_steps(tmp_path):

@@ -8,8 +8,7 @@ We currently support the latest version on the `main` branch.
 
 If you discover a security vulnerability, please report it responsibly.
 
-- Email: (add your contact if you have one, or use GitHub security advisory)
-- Or open a private security advisory on GitHub: https://github.com/JPatronC92/tempus-ddb/security/advisories/new
+- Open a private security advisory on GitHub: https://github.com/JPatronC92/tempus-ddb/security/advisories/new
 
 Please do **not** open a public issue for security vulnerabilities.
 

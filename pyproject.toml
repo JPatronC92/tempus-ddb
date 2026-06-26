@@ -46,3 +46,6 @@ tempus = "tempus_ddb.cli:main"
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "tempus_ddb._tempus_ddb"
+
+[tool.pytest.ini_options]
+pythonpath = ["python"]

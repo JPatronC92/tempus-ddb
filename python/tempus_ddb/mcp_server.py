@@ -71,10 +71,7 @@ async def list_tools() -> list[Tool]:
                     "payload": {"type": "string", "description": "JSON payload representing the decision"},
                     "rules": {"type": "string", "description": "JSON rules representing the logic applied"},
                     "keyfile": {"type": "string", "description": "Path to the keys.json file"},
-                    "parent": {"type": "string", "description": "ID of the parent decision. Omit for genesis."},
                     "genesis": {"type": "boolean", "description": "True if this is the first decision in the chain."},
-                    "agent_id": {"type": "string", "description": "Optional agent identifier."},
-                    "idempotency_key": {"type": "string", "description": "Unique key (optional, for client-side dedup)."}
                 },
                 "required": ["db", "payload", "rules", "keyfile"]
             }
@@ -89,10 +86,7 @@ async def list_tools() -> list[Tool]:
                     "payload": {"type": "string", "description": "JSON payload representing the decision"},
                     "rules": {"type": "string", "description": "JSON rules representing the logic applied"},
                     "keyfile": {"type": "string", "description": "Path to the keys.json file"},
-                    "parent": {"type": "string", "description": "ID of the parent decision. Omit for genesis."},
                     "genesis": {"type": "boolean", "description": "True if this is the first decision in the chain."},
-                    "agent_id": {"type": "string", "description": "Optional agent identifier."},
-                    "idempotency_key": {"type": "string", "description": "Unique key (optional, for client-side dedup)."}
                 },
                 "required": ["db", "payload", "rules", "keyfile"]
             }
