@@ -22,7 +22,7 @@ def test_gen_keys_and_record_genesis(tmp_path):
     gen_keys(str(keyfile))
     assert keyfile.exists()
 
-    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+    db = TempusDDB(str(db_path), str(keyfile))
 
     payload = json.dumps({"action": "test_action", "value": 42})
     rules = json.dumps({"rule": "always_true"})
@@ -39,7 +39,7 @@ def test_record_with_parent_and_validate(tmp_path):
     db_path = tmp_path / "test.db"
 
     gen_keys(str(keyfile))
-    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+    db = TempusDDB(str(db_path), str(keyfile))
 
     # Genesis record
     payload1 = json.dumps({"step": 1, "decision": "start"})
@@ -68,7 +68,7 @@ def test_multiple_records_and_repeated_validate(tmp_path):
     db_path = tmp_path / "test.db"
 
     gen_keys(str(keyfile))
-    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+    db = TempusDDB(str(db_path), str(keyfile))
 
     # Multiple decisions
     for i in range(5):
@@ -95,7 +95,7 @@ def test_record_without_genesis_fails_without_parent(tmp_path):
     db_path = tmp_path / "test.db"
 
     gen_keys(str(keyfile))
-    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+    db = TempusDDB(str(db_path), str(keyfile))
 
     payload = json.dumps({"step": 2})
     rules = json.dumps({})
@@ -111,7 +111,7 @@ def test_validate_detects_tampering(tmp_path):
     db_path = tmp_path / "test.db"
 
     gen_keys(str(keyfile))
-    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+    db = TempusDDB(str(db_path), str(keyfile))
 
     db.record(json.dumps({"original": True}), json.dumps({}), genesis=True)
 
@@ -130,7 +130,7 @@ def test_record_accepts_both_string_and_dict_like(tmp_path):
     keyfile = tmp_path / "keys.json"
     db_path = tmp_path / "test.db"
     gen_keys(str(keyfile))
-    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+    db = TempusDDB(str(db_path), str(keyfile))
 
     # As strings (what CLI passes)
     result = db.record(
@@ -146,7 +146,7 @@ def test_idempotency_like_behavior(tmp_path):
     keyfile = tmp_path / "keys.json"
     db_path = tmp_path / "test.db"
     gen_keys(str(keyfile))
-    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+    db = TempusDDB(str(db_path), str(keyfile))
 
     p = json.dumps({"action": "idempotent_test"})
     r = json.dumps({})
@@ -161,7 +161,7 @@ def test_validate_on_empty_or_single_record(tmp_path):
     keyfile = tmp_path / "keys.json"
     db_path = tmp_path / "test.db"
     gen_keys(str(keyfile))
-    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+    db = TempusDDB(str(db_path), str(keyfile))
 
     # Validate before any records
     val = db.validate()
@@ -176,7 +176,7 @@ def test_record_chaining_via_payload(tmp_path):
     keyfile = tmp_path / "keys.json"
     db_path = tmp_path / "test.db"
     gen_keys(str(keyfile))
-    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+    db = TempusDDB(str(db_path), str(keyfile))
 
     h1 = json.loads(db.record(json.dumps({"step":1}), json.dumps({}), genesis=True))
     parent = h1.get("latest_hash") or h1.get("output", {}).get("latest_hash")
