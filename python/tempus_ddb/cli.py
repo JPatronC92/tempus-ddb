@@ -180,11 +180,9 @@ def run_record(args):
 
         db = TempusDDB(CLI_LICENSE, db_path, keyfile)
 
-        kwargs = {"genesis": args.genesis}
-        if args.parent:
-            kwargs["parent"] = args.parent
-
-        result = db.record(payload, rules, **kwargs)
+        # Note: The Rust binding only supports `genesis`. Logical parent chaining
+        # should be included in the `payload` if needed for audit purposes.
+        result = db.record(payload, rules, genesis=args.genesis)
         print("✓ Decision recorded successfully.")
         print(result)
     except Exception as e:
@@ -232,7 +230,8 @@ def main():
     record_p.add_argument("--payload", required=True, help="JSON string or path to JSON file with the decision")
     record_p.add_argument("--rules", required=True, help="JSON string or path to JSON file with the rules applied")
     record_p.add_argument("--genesis", action="store_true", help="Mark this as the first decision in the chain")
-    record_p.add_argument("--parent", help="Hash of the previous decision (required if not --genesis)")
+    # Note: Parent chaining for audit should be included inside the JSON payload.
+    # The core ledger is append-only controlled by the `genesis` flag.
 
     args = parser.parse_args()
 
