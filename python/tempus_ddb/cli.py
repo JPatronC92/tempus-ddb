@@ -14,35 +14,109 @@ def run_init():
     if os.path.exists(keyfile):
         print(f"[{keyfile}] already exists — skipping key generation.")
     else:
-        gen_keys(keyfile)
-        print(f"✓ Generated new Ed25519 keys → {keyfile}")
+        try:
+            gen_keys(keyfile)
+            print(f"✓ Generated new Ed25519 keys → {keyfile}")
+        except Exception as e:
+            print(f"✗ Failed to generate keys: {e}")
+            sys.exit(1)
 
     if os.path.exists(db_path):
         print(f"[{db_path}] already exists — verifying schema...")
     else:
         print(f"Initializing new ledger at {db_path}...")
 
-    # The license is only used for the Rust core gate (MCP auto-generates valid one)
-    db = TempusDDB("tmb_live_123_456", db_path, keyfile)
-    print("✓ Tempus DDB ready.")
-    print(f"  Keys:  {keyfile}")
-    print(f"  DB:    {db_path}")
+    try:
+        # The license is only used for the Rust core gate (MCP auto-generates valid one)
+        db = TempusDDB("tmb_live_123_456", db_path, keyfile)
+        print("✓ Tempus DDB ready.")
+        print(f"  Keys:  {keyfile}")
+        print(f"  DB:    {db_path}")
+    except Exception as e:
+        print(f"✗ Failed to initialize database: {e}")
+        sys.exit(1)
 
 def run_verify():
     keyfile = "keys.json"
     db_path = "tempus.db"
 
     if not os.path.exists(db_path):
-        print("No database found. Run 'tempus init' first.")
-        return
+        print("✗ No database found. Run 'tempus init' first.")
+        sys.exit(1)
 
-    db = TempusDDB("tmb_live_123_456", db_path, keyfile if os.path.exists(keyfile) else "keys.json")
     try:
+        db = TempusDDB("tmb_live_123_456", db_path, keyfile if os.path.exists(keyfile) else "keys.json")
         result = db.validate()
-        print("✓ Ledger validation successful.")
-        print(result)
+        result_str = str(result).lower()
+        if "invalid" in result_str or "error" in result_str or "mismatch" in result_str:
+            print("✗ Ledger validation FAILED")
+            print(result)
+            sys.exit(1)
+        else:
+            print("✓ Ledger validation successful.")
+            print(result)
     except Exception as e:
         print(f"✗ Validation failed: {e}")
+        sys.exit(1)
+
+
+def run_status():
+    keyfile = "keys.json"
+    db_path = "tempus.db"
+
+    print("Tempus DDB Status")
+    print("=================")
+
+    # Keys
+    if os.path.exists(keyfile):
+        try:
+            size = os.path.getsize(keyfile)
+            print(f"✓ Keys file: {keyfile} ({size} bytes)")
+        except Exception:
+            print(f"✓ Keys file: {keyfile}")
+    else:
+        print("✗ Keys file: not found (run 'tempus init')")
+
+    # Database
+    if os.path.exists(db_path):
+        try:
+            size = os.path.getsize(db_path)
+            print(f"✓ Database: {db_path} ({size} bytes)")
+        except Exception:
+            print(f"✓ Database: {db_path}")
+
+        try:
+            db = TempusDDB("tmb_live_123_456", db_path, keyfile if os.path.exists(keyfile) else "keys.json")
+            validation = db.validate()
+            val_str = str(validation).lower()
+
+            if "invalid" in val_str or "error" in val_str or "mismatch" in val_str:
+                print("✗ Chain integrity: INVALID")
+                print(f"  Details: {validation}")
+            else:
+                print("✓ Chain integrity: VALID")
+
+            # Try to show last hash if present in result
+            try:
+                if isinstance(validation, str):
+                    data = json.loads(validation)
+                else:
+                    data = validation
+                if isinstance(data, dict):
+                    last_hash = data.get("latest_hash") or data.get("result", {}).get("latest_hash")
+                    if last_hash:
+                        print(f"  Latest hash: {last_hash}")
+            except Exception:
+                pass
+
+        except Exception as e:
+            print(f"✗ Could not validate database: {e}")
+    else:
+        print("✗ Database: not found (run 'tempus init' and record at least once)")
+
+    print("\nNext steps if needed:")
+    print("  tempus init     # to initialize")
+    print("  tempus record   # to record a decision")
 
 def run_record(args):
     """Direct CLI recording (task D improvement)."""
@@ -50,34 +124,58 @@ def run_record(args):
     db_path = args.db or "tempus.db"
 
     if not os.path.exists(keyfile):
-        print("No keys found. Run 'tempus init' first.")
+        print("✗ No keys found. Run 'tempus init' first.")
+        sys.exit(1)
+
+    if not os.path.exists(db_path) and not args.genesis:
+        # For non-genesis, db should exist
+        print("✗ Database not found. You must create the first (genesis) record first.")
         sys.exit(1)
 
     try:
+        # Load payload
         payload = args.payload
-        if payload and os.path.isfile(payload):
-            with open(payload) as f:
-                payload = f.read()
-        rules = args.rules
-        if rules and os.path.isfile(rules):
-            with open(rules) as f:
-                rules = f.read()
+        if os.path.isfile(payload):
+            with open(payload, encoding="utf-8") as f:
+                payload = f.read().strip()
+        try:
+            json.loads(payload)
+        except json.JSONDecodeError:
+            print("✗ --payload must be valid JSON (or path to JSON file)")
+            sys.exit(1)
 
-        if not payload or not rules:
-            print("Error: --payload and --rules are required (or paths to JSON files).")
+        # Load rules
+        rules = args.rules
+        if os.path.isfile(rules):
+            with open(rules, encoding="utf-8") as f:
+                rules = f.read().strip()
+        try:
+            json.loads(rules)
+        except json.JSONDecodeError:
+            print("✗ --rules must be valid JSON (or path to JSON file)")
+            sys.exit(1)
+
+        # Validation for chaining
+        if not args.genesis and not args.parent:
+            print("✗ Non-genesis records require --parent <hash> (get it from previous record result or 'tempus status')")
             sys.exit(1)
 
         db = TempusDDB("tmb_live_123_456", db_path, keyfile)
 
-        result = db.record(
-            payload=payload,
-            rules=rules,
-            genesis=args.genesis
-        )
+        kwargs = {"genesis": args.genesis}
+        if args.parent:
+            kwargs["parent"] = args.parent
+
+        result = db.record(payload, rules, **kwargs)
         print("✓ Decision recorded successfully.")
         print(result)
     except Exception as e:
-        print(f"✗ Record failed: {e}")
+        err_msg = str(e)
+        if "parent" in err_msg.lower() or "genesis" in err_msg.lower():
+            print(f"✗ Chaining error: {err_msg}")
+            print("  Tip: Use --genesis for the first record, or provide --parent with the previous hash.")
+        else:
+            print(f"✗ Record failed: {err_msg}")
         sys.exit(1)
 
 def run_version():
@@ -88,7 +186,10 @@ def main():
         prog="tempus",
         description="Tempus DDB — The Tamper-Proof Flight Recorder for AI Agents"
     )
-    parser.add_argument("--version", action="store_true", help="Show version and exit")
+    parser.add_argument(
+        "--version", action="store_true",
+        help="Show version and exit"
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=False)
 
@@ -103,6 +204,9 @@ def main():
     # verify
     subparsers.add_parser("verify", help="Cryptographically verify the entire ledger")
 
+    # status
+    subparsers.add_parser("status", help="Show current ledger and keys status")
+
     # record (new/improved for CLI users)
     record_p = subparsers.add_parser("record", help="Record a decision directly from CLI")
     record_p.add_argument("--db", default="tempus.db", help="Path to the ledger database")
@@ -110,6 +214,7 @@ def main():
     record_p.add_argument("--payload", required=True, help="JSON string or path to JSON file with the decision")
     record_p.add_argument("--rules", required=True, help="JSON string or path to JSON file with the rules applied")
     record_p.add_argument("--genesis", action="store_true", help="Mark this as the first decision in the chain")
+    record_p.add_argument("--parent", help="Hash of the previous decision (required if not --genesis)")
 
     args = parser.parse_args()
 
@@ -117,18 +222,28 @@ def main():
         run_version()
         return
 
-    if args.command == "init":
-        run_init()
-    elif args.command == "mcp" and getattr(args, "mcp_cmd", None) == "start":
-        main_sync()
-    elif args.command == "verify":
-        run_verify()
-    elif args.command == "record":
-        run_record(args)
-    elif args.command is None:
-        parser.print_help()
-    else:
-        parser.print_help()
+    try:
+        if args.command == "init":
+            run_init()
+        elif args.command == "mcp" and getattr(args, "mcp_cmd", None) == "start":
+            main_sync()
+        elif args.command == "verify":
+            run_verify()
+        elif args.command == "status":
+            run_status()
+        elif args.command == "record":
+            run_record(args)
+        elif args.command is None:
+            parser.print_help()
+        else:
+            parser.print_help()
+    except KeyboardInterrupt:
+        print("\nInterrupted by user.")
+        sys.exit(130)
+    except Exception as e:
+        # Last resort - should not reach here for handled cases
+        print(f"Unexpected error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
