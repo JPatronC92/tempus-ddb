@@ -170,3 +170,23 @@ def test_validate_on_empty_or_single_record(tmp_path):
     db.record(json.dumps({"only": "one"}), json.dumps({}), genesis=True)
     val2 = db.validate()
     assert "valid" in str(val2).lower() or "success" in str(val2).lower()
+
+
+def test_record_chaining_via_payload(tmp_path):
+    keyfile = tmp_path / "keys.json"
+    db_path = tmp_path / "test.db"
+    gen_keys(str(keyfile))
+    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+
+    h1 = json.loads(db.record(json.dumps({"step":1}), json.dumps({}), genesis=True))
+    parent = h1.get("latest_hash") or h1.get("output", {}).get("latest_hash")
+
+    h2 = json.loads(db.record(
+        json.dumps({"step":2, "parent": parent}),
+        json.dumps({}),
+        genesis=False
+    ))
+    assert h2 is not None
+
+    val = db.validate()
+    assert "valid" in str(val).lower() or "success" in str(val).lower()
