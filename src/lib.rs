@@ -6,12 +6,7 @@ use pyo3::exceptions::{PyPermissionError, PyRuntimeError, PyIOError};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-// --- 1. LÓGICA DE SEGURIDAD COMÚN (GATEKEEPER) ---
-
-/// HMAC secret used for license key verification.
-/// NOTE: In production, this would be fetched from a secure server or HSM,
-/// not hardcoded. This is a placeholder for the HMAC-based verification scheme.
-const LICENSE_SECRET: &[u8] = b"tempus-ddb-hmac-secret-key-v1-2026";
+// --- 1. PATRÓN STORAGE LAYER (TRAIT) ---
 
 /// Verify a license key using HMAC-SHA256.
 ///
@@ -19,52 +14,7 @@ const LICENSE_SECRET: &[u8] = b"tempus-ddb-hmac-secret-key-v1-2026";
 ///
 /// The HMAC is computed over the random_part using LICENSE_SECRET.
 /// Both the prefix and the cryptographic signature must be valid.
-fn check_license(license_key: &str) -> Result<(), String> {
-    use hmac::{Hmac, Mac};
-    use sha2::Sha256;
 
-    type HmacSha256 = Hmac<Sha256>;
-
-    let prefix = "tmb_live_";
-
-    if !license_key.starts_with(prefix) {
-        return Err("TempusDDB Auth Error: Invalid license key format (missing prefix).".to_string());
-    }
-
-    let without_prefix = &license_key[prefix.len()..];
-
-    // The format after the prefix is: {random_part}_{hmac_signature}
-    // Find the LAST underscore to split random_part from the HMAC signature,
-    // since the random_part itself should not contain underscores but we
-    // use rfind for robustness.
-    let last_underscore = without_prefix.rfind('_').ok_or_else(|| {
-        "TempusDDB Auth Error: Invalid license key format (missing HMAC signature).".to_string()
-    })?;
-
-    let random_part = &without_prefix[..last_underscore];
-    let provided_hmac_hex = &without_prefix[last_underscore + 1..];
-
-    if random_part.is_empty() || provided_hmac_hex.is_empty() {
-        return Err("TempusDDB Auth Error: Invalid license key format (empty components).".to_string());
-    }
-
-    // Decode the provided HMAC hex
-    let provided_hmac_bytes = hex::decode(provided_hmac_hex).map_err(|_| {
-        "TempusDDB Auth Error: Invalid license key (malformed HMAC signature).".to_string()
-    })?;
-
-    // Compute HMAC-SHA256 of the random part
-    let mut mac = HmacSha256::new_from_slice(LICENSE_SECRET)
-        .map_err(|_| "TempusDDB Auth Error: Internal HMAC initialization failure.".to_string())?;
-    mac.update(random_part.as_bytes());
-
-    // Verify (constant-time comparison)
-    mac.verify_slice(&provided_hmac_bytes).map_err(|_| {
-        "TempusDDB Auth Error: License key is invalid, revoked, or expired.".to_string()
-    })?;
-
-    Ok(())
-}
 
 // --- 2. PATRÓN STORAGE LAYER (TRAIT) ---
 pub trait StorageLayer {
@@ -532,7 +482,6 @@ impl StorageLayer for SqliteStorage {
 #[cfg(not(target_arch = "wasm32"))]
 #[pyclass]
 pub struct TempusDDB {
-    license_key: String,
     storage: SqliteStorage,
     #[allow(dead_code)]
     keyfile: String,
@@ -542,19 +491,15 @@ pub struct TempusDDB {
 #[pymethods]
 impl TempusDDB {
     #[new]
-    fn new(license_key: String, db_path: String, keyfile: String) -> PyResult<Self> {
+    fn new(db_path: String, keyfile: String) -> PyResult<Self> {
         let storage = SqliteStorage::new(db_path, keyfile.clone())
             .map_err(|e| PyPermissionError::new_err(e))?;
-        Ok(TempusDDB { license_key, storage, keyfile })
+        Ok(TempusDDB { storage, keyfile })
     }
 
     #[allow(unused_variables)]
     #[pyo3(signature = (payload, rules, genesis=false))]
     fn record(&mut self, payload: &str, rules: &str, genesis: bool) -> PyResult<String> {
-        if let Err(e) = check_license(&self.license_key) {
-            return Err(PyPermissionError::new_err(e));
-        }
-
         self.storage.insert_decision(payload, rules, genesis).map_err(|e| PyPermissionError::new_err(e))?;
 
         let result_json = format!(
@@ -566,17 +511,11 @@ impl TempusDDB {
 
     #[pyo3(signature = ())]
     fn validate(&self) -> PyResult<String> {
-        if let Err(e) = check_license(&self.license_key) {
-            return Err(PyPermissionError::new_err(e));
-        }
         self.storage.validate_ledger().map_err(|e| PyRuntimeError::new_err(e))
     }
 
     #[pyo3(signature = ())]
     fn export(&self) -> PyResult<String> {
-        if let Err(e) = check_license(&self.license_key) {
-            return Err(PyPermissionError::new_err(e));
-        }
         self.storage.export_ledger().map_err(|e| PyRuntimeError::new_err(e))
     }
 }
@@ -637,7 +576,6 @@ fn _tempus_ddb(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct TempusDDBWasm {
-    license_key: String,
     storage: MemoryStorage,
     keyfile: String,
 }
@@ -646,18 +584,13 @@ pub struct TempusDDBWasm {
 #[wasm_bindgen]
 impl TempusDDBWasm {
     #[wasm_bindgen(constructor)]
-    pub fn new(license_key: String, keyfile: String) -> Result<TempusDDBWasm, JsValue> {
+    pub fn new(keyfile: String) -> Result<TempusDDBWasm, JsValue> {
         let storage = MemoryStorage::new();
-        Ok(TempusDDBWasm { license_key, storage, keyfile })
+        Ok(TempusDDBWasm { storage, keyfile })
     }
 
     #[wasm_bindgen]
     pub fn record(&mut self, payload: &str, rules: &str, genesis: bool) -> Result<String, JsValue> {
-        // REQUISITO CUMPLIDO: Gatekeeper intacto. Arrojará un error nativo en JS interceptable.
-        if let Err(e) = check_license(&self.license_key) {
-            return Err(JsValue::from_str(&e));
-        }
-
         self.storage.insert_decision(payload, rules, genesis).map_err(|e| JsValue::from_str(&e))?;
 
         let result_json = format!(

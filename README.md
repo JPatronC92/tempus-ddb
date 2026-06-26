@@ -185,7 +185,7 @@ tempus record \
 - Only the holder of the private key in `keyfile` can create valid signed records.
 - Hash chaining + signatures → any modification is immediately detectable.
 - Fully local by default — nothing leaves the machine.
-- The license gate in the Rust core is satisfied automatically by the MCP layer for local use.
+- The core has no license gate. It is fully open.
 
 ---
 

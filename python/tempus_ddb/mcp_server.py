@@ -26,16 +26,8 @@ def validate_path(path: str) -> str:
         raise ValueError(f"Path escapes sandbox: {path}")
     return resolved
 
-# ── Import PyO3 native module and Generate Local License ────────────────
+# ── Import PyO3 native module ────────────────
 import tempus_ddb
-
-def _generate_local_license() -> str:
-    alphabet = string.ascii_letters + string.digits
-    random_part = ''.join(secrets.choice(alphabet) for _ in range(24))
-    hmac_sig = hmac.new(b"tempus-ddb-hmac-secret-key-v1-2026", random_part.encode('utf-8'), hashlib.sha256).hexdigest()
-    return f"tmb_live_{random_part}_{hmac_sig}"
-
-LOCAL_LICENSE = _generate_local_license()
 
 # ── Input validation helpers ─────────────────────────────────────
 def validate_json_string(value: str, field_name: str) -> None:
@@ -136,7 +128,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "tempus_init":
             db_path = validate_path(arguments.get("db", "tempus.db"))
-            db = tempus_ddb.TempusDDB(LOCAL_LICENSE, db_path, "keys.json")
+            db = tempus_ddb.TempusDDB(db_path, "keys.json")
             return [TextContent(type="text", text=json.dumps({
                 "status": "success",
                 "message": f"Database initialized: {db_path}",
@@ -168,7 +160,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             genesis = arguments.get("genesis", False)
 
-            db_instance = tempus_ddb.TempusDDB(LOCAL_LICENSE, db, keyfile)
+            db_instance = tempus_ddb.TempusDDB(db, keyfile)
             output = db_instance.record(payload, rules, genesis)
 
             result = {
@@ -182,7 +174,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "tempus_validate":
             db_path = validate_path(arguments.get("db", "tempus.db"))
-            db = tempus_ddb.TempusDDB(LOCAL_LICENSE, db_path, "keys.json")
+            db = tempus_ddb.TempusDDB(db_path, "keys.json")
             try:
                 output = db.validate()
                 out_str = str(output).lower()

@@ -13,7 +13,7 @@ Typical usage:
     from tempus_ddb import TempusDDB, gen_keys
 
     gen_keys("keys.json")
-    db = TempusDDB(license_key, "tempus.db", "keys.json")
+    db = TempusDDB("tempus.db", "keys.json")
     db.record(payload, rules, genesis=True)
 """
 

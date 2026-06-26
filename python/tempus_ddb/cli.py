@@ -4,27 +4,8 @@ import os
 import json
 from .mcp_server import main_sync
 from ._tempus_ddb import TempusDDB, gen_keys
-import hashlib
-import hmac
-import secrets
-import string
 
 __version__ = "0.2.0-dev"  # update on releases
-
-
-def _get_cli_license() -> str:
-    """Generate a valid license key for direct CLI usage (exact same as MCP server)."""
-    alphabet = string.ascii_letters + string.digits
-    random_part = ''.join(secrets.choice(alphabet) for _ in range(24))
-    hmac_sig = hmac.new(
-        b"tempus-ddb-hmac-secret-key-v1-2026",
-        random_part.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
-    return f"tmb_live_{random_part}_{hmac_sig}"
-
-
-CLI_LICENSE = _get_cli_license()
 
 def run_init():
     keyfile = "keys.json"
@@ -46,7 +27,7 @@ def run_init():
         print(f"Initializing new ledger at {db_path}...")
 
     try:
-        db = TempusDDB(CLI_LICENSE, db_path, keyfile)
+        db = TempusDDB(db_path, keyfile)
         print("✓ Tempus DDB ready.")
         print(f"  Keys:  {keyfile}")
         print(f"  DB:    {db_path}")
@@ -63,7 +44,7 @@ def run_verify():
         sys.exit(1)
 
     try:
-        db = TempusDDB(CLI_LICENSE, db_path, keyfile if os.path.exists(keyfile) else "keys.json")
+        db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else "keys.json")
         result = db.validate()
         result_str = str(result).lower()
         if "invalid" in result_str or "error" in result_str or "mismatch" in result_str:
@@ -104,7 +85,7 @@ def run_status():
             print(f"✓ Database: {db_path}")
 
         try:
-            db = TempusDDB(CLI_LICENSE, db_path, keyfile if os.path.exists(keyfile) else "keys.json")
+            db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else "keys.json")
             validation = db.validate()
             val_str = str(validation).lower()
 
@@ -178,7 +159,7 @@ def run_record(args):
             print("✗ Non-genesis records require --parent <hash> (get it from previous record result or 'tempus status')")
             sys.exit(1)
 
-        db = TempusDDB(CLI_LICENSE, db_path, keyfile)
+        db = TempusDDB(db_path, keyfile)
 
         # Note: The Rust binding only supports `genesis`. Logical parent chaining
         # should be included in the `payload` if needed for audit purposes.
