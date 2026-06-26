@@ -1,23 +1,21 @@
-# Tempus DDB: The Decision Database for Autonomous Agents
+# Tempus DDB: Tamper-Proof Decision Ledger for AI Agents
 
-Tempus DDB is a decentralized, immutable decision ledger designed specifically for autonomous AI agents. Built on Rust and SQLite with Ed25519 cryptography, it allows agents to create an auditable, tamper-proof "Flight Recorder" of their actions, decisions, and reasoning.
+Tempus DDB is a lightweight, immutable decision ledger for autonomous AI agents. Built in Rust + SQLite with Ed25519 cryptography, it lets agents create a cryptographically verifiable audit trail ("Flight Recorder") of their critical decisions and actions.
 
 ## Key Features
 
-1. **Cryptographic Proof-of-Decision**: Every action is hashed and signed, creating an immutable causal chain.
-2. **High Performance**: Rust core with SQLite backend ensures lightning-fast local operations.
-3. **Agent-Native (B2A)**: Built with the Model Context Protocol (MCP) in mind. It exposes standard tools for agents to integrate dynamically.
-4. **Autonomous Monetization**: Includes a simulated smart-contract paywall. Agents must autonomously learn to fund their wallets to record decisions, enforcing a "Crypto Tollbooth" dynamic.
+1. **Cryptographic Proof-of-Decision** — Every record is hashed and signed, forming an immutable causal chain.
+2. **High Performance** — Rust core + SQLite. Extremely fast for local use.
+3. **Agent-Native (MCP)** — Exposes clean tools via the Model Context Protocol so agents (Claude, etc.) can use it directly.
+4. **Simple & Free** — No paywalls. Just initialize, generate keys, and record decisions.
 
 ## Architecture
 
-- **Core Engine (Rust)**: Handles cryptographic signing, hashing, database initialization, and ledger validation.
-- **MCP Server (Python)**: Acts as the integration layer. Exposes tools like `tempus_record` and `tempus_validate`. Handles the crypto paywall simulation and errors.
-- **Agent Instructions**: Self-healing documentation (`AGENT_INSTRUCTIONS.md`) designed to be read by LLMs to learn how to bypass the paywall autonomously.
+- **Core Engine (Rust)**: Cryptographic signing, hashing, SQLite storage and ledger validation.
+- **MCP Server (Python)**: Thin integration layer exposing `tempus_record`, `tempus_validate`, etc.
+- Fully self-contained. No external services required.
 
 ## Getting Started (CLI)
-
-Tempus DDB v0.4.0-b2a-package includes a full CLI and a Python package that bundles the native Rust core and the MCP server.
 
 ### Installation
 
@@ -29,48 +27,53 @@ pip install .
 
 ### Quick Start
 
-Initialize your local files (does not overwrite existing keys/database):
 ```bash
+# 1. Initialize (creates keys + db)
 tempus init
-```
 
-Run the interactive B2A mock agent demo:
-```bash
-tempus demo b2a
-```
-
-Start the MCP server directly using stdio:
-```bash
+# 2. Start the MCP server (for Claude Desktop / MCP clients)
 tempus mcp start
 ```
 
-### MCP Client Configuration
+### Verify the ledger
 
-To configure Tempus DDB in your favorite MCP client (like Claude Desktop or the MCP Inspector), add the following to your configuration file:
+```bash
+tempus verify
+```
+
+### MCP Client Configuration (Claude Desktop, etc.)
 
 ```json
 {
   "mcpServers": {
     "tempus-ddb": {
       "command": "tempus",
-      "args": ["mcp", "start"],
-      "env": {
-        "TEMPUS_MODE": "demo"
-      }
+      "args": ["mcp", "start"]
     }
   }
 }
 ```
 
+## Core Tools (MCP)
+
+- `tempus_init` — Initialize the database
+- `tempus_gen_keys` — Generate Ed25519 keypair
+- `tempus_record` / `tempus_record_decision` — Record an immutable decision
+- `tempus_validate` — Verify the entire causal chain
+- `tempus_cleanup` — Reset local files
+
+## When to use it
+
+Use Tempus DDB before executing high-stakes actions:
+- Financial transactions or budget approvals
+- Code changes with external access
+- Configuration or permission changes
+- Strategic business decisions
+
 ## Roadmap
 
-- [x] **Fase 1: Motor Core en Rust e Integración Causal (Completado)**
-  - Criptografía Ed25519, hashing SHA-256 e integración local con SQLite.
-- [x] **Fase 2: Modelo de Negocio B2A & Autorecuperación (Completado)**
-  - Protocolo MCP, adaptador de pago demo/local, balance de saldo, error `TEMPUS_INSUFFICIENT_FUNDS` estructurado e instrucciones operativas para agentes autónomos.
-- [ ] **Fase 3: Adaptador de Pago Web3 / Red de Prueba (Pendiente)**
-  - Reemplazo del adaptador demo por transacciones reales en redes de prueba (EVM / Solana) usando stablecoins (USDC) y gasless meta-transactions.
-- [ ] **Fase 4: Sincronización en la Nube y Agregación (Pendiente)**
-  - Exportación diferida y consolidación de los ledgers locales síncronos a un registro de auditoría global inmutable.
-- [ ] **Fase 5: Consenso y Ledger Multi-Agente (Pendiente)**
-  - Compartición de cadenas causales firmadas por múltiples agentes interactuando cooperativa o competitivamente en el mismo entorno.
+- [x] Core Rust engine + Ed25519 + SQLite causal ledger
+- [x] MCP integration (free, no paywall)
+- [ ] Cloud synchronization & aggregation
+- [ ] Multi-agent consensus
+- [ ] Optional on-chain notarization (future)
