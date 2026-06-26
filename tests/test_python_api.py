@@ -139,3 +139,34 @@ def test_record_accepts_both_string_and_dict_like(tmp_path):
         genesis=True
     )
     assert result is not None
+
+
+def test_idempotency_like_behavior(tmp_path):
+    """Basic check that repeated identical genesis with different calls still work (idempotency handled at MCP layer)."""
+    keyfile = tmp_path / "keys.json"
+    db_path = tmp_path / "test.db"
+    gen_keys(str(keyfile))
+    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+
+    p = json.dumps({"action": "idempotent_test"})
+    r = json.dumps({})
+
+    res1 = db.record(p, r, genesis=True)
+    res2 = db.record(p, r, genesis=True)  # Should still succeed or be handled upper layer
+
+    assert res1 is not None and res2 is not None
+
+
+def test_validate_on_empty_or_single_record(tmp_path):
+    keyfile = tmp_path / "keys.json"
+    db_path = tmp_path / "test.db"
+    gen_keys(str(keyfile))
+    db = TempusDDB("tmb_live_test", str(db_path), str(keyfile))
+
+    # Validate before any records
+    val = db.validate()
+    assert val is not None
+
+    db.record(json.dumps({"only": "one"}), json.dumps({}), genesis=True)
+    val2 = db.validate()
+    assert "valid" in str(val2).lower() or "success" in str(val2).lower()
