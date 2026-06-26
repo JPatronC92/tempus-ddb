@@ -199,6 +199,15 @@ Focus areas:
 - Production readiness & tests
 - Ecosystem examples (LangGraph, CrewAI, etc.)
 
+## Releasing
+
+1. Update version in `pyproject.toml` and `Cargo.toml`
+2. Update `CHANGELOG.md`
+3. Commit and tag: `git tag vX.Y.Z`
+4. Push tag: `git push origin vX.Y.Z`
+5. Create GitHub Release (the release.yml will build and attach wheels automatically)
+6. (Optional) Publish to PyPI: use the release workflow or `maturin publish`
+
 ---
 
 ## Contributing
