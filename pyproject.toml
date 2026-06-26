@@ -26,7 +26,18 @@ dependencies = [
     "mcp",
     "python-dotenv"
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "maturin",
+]
 keywords = ["ai", "agents", "ledger", "audit", "cryptography", "mcp", "tamper-evident"]
+
+[project.urls]
+Homepage = "https://github.com/JPatronC92/tempus-ddb"
+Repository = "https://github.com/JPatronC92/tempus-ddb"
+Issues = "https://github.com/JPatronC92/tempus-ddb/issues"
 
 [project.scripts]
 tempus = "tempus_ddb.cli:main"
