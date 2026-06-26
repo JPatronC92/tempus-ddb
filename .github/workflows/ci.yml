@@ -33,7 +33,9 @@ jobs:
         pip install maturin pytest
 
     - name: Build and install the package
-      run: maturin develop
+      run: |
+        maturin develop
+        pip install -e .
 
     - name: Run Python tests
       run: pytest tests/ -v --tb=short
@@ -43,5 +45,5 @@ jobs:
 
     - name: Test CLI basic commands
       run: |
-        python -m tempus_ddb.cli --version || echo "CLI module test"
-        python -m tempus_ddb.cli --help || echo "CLI help test"
+        tempus --version
+        tempus --help
