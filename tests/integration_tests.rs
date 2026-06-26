@@ -1,7 +1,6 @@
+use serde_json::Value;
 use std::process::Command;
 use tempfile::NamedTempFile;
-use std::fs;
-use serde_json::Value;
 
 // Run the tempus-ddb binary
 fn run_cli(args: &[&str]) -> (bool, String, String) {
@@ -37,10 +36,14 @@ fn test_end_to_end_flow() {
     let rules = r#"{"rule": "allow"}"#;
     let (success, stdout, _) = run_cli(&[
         "record",
-        "--db", db_path,
-        "--keyfile", key_path,
-        "--payload", payload,
-        "--rules", rules,
+        "--db",
+        db_path,
+        "--keyfile",
+        key_path,
+        "--payload",
+        payload,
+        "--rules",
+        rules,
         "--genesis",
     ]);
     assert!(success, "Record genesis failed");
@@ -51,27 +54,39 @@ fn test_end_to_end_flow() {
     // Attempting a second genesis should fail
     let (success, _, stderr) = run_cli(&[
         "record",
-        "--db", db_path,
-        "--keyfile", key_path,
-        "--payload", payload,
-        "--rules", rules,
+        "--db",
+        db_path,
+        "--keyfile",
+        key_path,
+        "--payload",
+        payload,
+        "--rules",
+        rules,
         "--genesis",
     ]);
     assert!(!success, "Second genesis should fail");
-    assert!(stderr.contains("A genesis decision already exists"), "Unexpected error message");
+    assert!(
+        stderr.contains("A genesis decision already exists"),
+        "Unexpected error message"
+    );
 
     // Record Child Decision
     let child_payload = r#"{"action": "update_user"}"#;
     let (success, stdout, _) = run_cli(&[
         "record",
-        "--db", db_path,
-        "--keyfile", key_path,
-        "--payload", child_payload,
-        "--rules", rules,
-        "--parent", genesis_id,
+        "--db",
+        db_path,
+        "--keyfile",
+        key_path,
+        "--payload",
+        child_payload,
+        "--rules",
+        rules,
+        "--parent",
+        genesis_id,
     ]);
     assert!(success, "Record child failed");
-    
+
     let child_decision: Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(child_decision["causal_depth"], 1);
 

@@ -1,5 +1,5 @@
 """
-Tempus DDB - The Tamper-Proof Flight Recorder for AI Agents
+Tempus DDB - The Tamper-Evident Flight Recorder for AI Agents
 
 This package provides a cryptographically secure, immutable ledger for recording
 critical decisions made by autonomous AI agents.

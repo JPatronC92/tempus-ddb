@@ -34,7 +34,7 @@ Tempus DDB is a local-first, tamper-evident ledger for AI agent decisions. It pr
 ### 3. Database Deletion or Loss
 
 - **Impact**: Loss of history.
-- **Mitigation**: User responsibility to backup `tempus.db`. The project does not provide replication (yet).
+- **Mitigation**: Tempus DDB is tamper-evident, not deletion-proof. Users are responsible for backing up `tempus.db` and `keys.json`; the project does not provide replication (yet).
 
 ### 4. Supply Chain / Malicious Library
 
@@ -43,7 +43,8 @@ Tempus DDB is a local-first, tamper-evident ledger for AI agent decisions. It pr
 ### 5. MCP Tool Misuse
 
 - Agents calling tools incorrectly.
-- **Mitigation**: Idempotency keys, clear error messages, structured errors.
+- **Current mitigation**: Clear error messages and structured errors.
+- **Future mitigation**: Idempotency keys or client-side request identifiers may be added later, but they are not implemented today.
 
 ## Out of Scope
 

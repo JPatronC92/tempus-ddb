@@ -5,7 +5,7 @@
 <h1 align="center">Tempus DDB</h1>
 
 <p align="center">
-  <strong>The Tamper-Proof Flight Recorder for AI Agents</strong><br>
+  <strong>The Tamper-Evident Flight Recorder for AI Agents</strong><br>
   <sub>Local-first • Cryptographically verifiable • Built for MCP</sub>
 </p>
 
@@ -22,9 +22,9 @@
 
 ## What is Tempus DDB?
 
-**Tempus DDB** is a **free, local-first, cryptographically secure decision ledger** for autonomous AI agents and agentic systems.
+**Tempus DDB** is a **free, local-first, offline-by-default, cryptographically verifiable decision ledger** for autonomous AI agents and agentic systems.
 
-It functions as an **immutable Flight Recorder**: agents can record critical decisions with Ed25519 digital signatures and a hash-chained causal structure. This produces a tamper-proof audit trail that can be independently verified at any time.
+It functions as an **immutable Flight Recorder**: agents can record critical decisions with Ed25519 digital signatures and a hash-chained causal structure. This produces a tamper-evident audit trail that can be independently verified at any time.
 
 ### Official One-Liner
 > Give your AI agents a memory they cannot rewrite.
@@ -32,7 +32,7 @@ It functions as an **immutable Flight Recorder**: agents can record critical dec
 ### Core Value Proposition
 - **Verifiability first**: Every decision is signed and linked — alterations are immediately detectable.
 - **Built for agents**: Native support for MCP (Model Context Protocol), making it trivial to integrate with Claude, Cursor, LangGraph, CrewAI, etc.
-- **Zero friction**: Completely free, offline by default, no accounts or cloud required.
+- **Zero friction**: Completely free, offline by default, no accounts, no cloud required, and no license gate.
 - **Production-grade simplicity**: Small Rust core + clean Python bindings. One binary. One database.
 
 ### Positioning
@@ -174,8 +174,8 @@ tempus record \
 | `tempus_init`           | Initialize SQLite ledger                              | `db`                                        |
 | `tempus_gen_keys`       | Generate Ed25519 signing keys                         | `output`                                    |
 | `tempus_record`         | Record decision (alias)                               | `db`, `payload`, `rules`, `keyfile`         |
-| `tempus_record_decision`| Main tool to log a decision                           | + `genesis`, `parent`, `idempotency_key`    |
-| `tempus_validate`       | Verify the full immutable chain                       | `db`                                        |
+| `tempus_record_decision`| Main tool to log a decision                           | `db`, `payload`, `rules`, `keyfile`, `genesis` |
+| `tempus_validate`       | Verify the full tamper-evident chain                  | `db`                                        |
 | `tempus_cleanup`        | Wipe local files (useful for demos)                   | —                                           |
 
 ---
@@ -194,10 +194,15 @@ tempus record \
 See the high-level roadmap in the project issues or contact the maintainers for the latest internal roadmap.
 
 Focus areas:
+- Stabilizing the free/open-source local ledger beta
 - CLI & DX improvements (in progress)
 - Packaging & distribution
 - Production readiness & tests
 - Ecosystem examples (LangGraph, CrewAI, etc.)
+
+## WASM Status
+
+WASM support is experimental and currently uses in-memory stub storage. Do not rely on it for persistent ledgers or audit workflows yet.
 
 ## Releasing
 

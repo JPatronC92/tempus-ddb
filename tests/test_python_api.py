@@ -10,6 +10,7 @@ Run with:
 
 import json
 import os
+import sqlite3
 import pytest
 
 from tempus_ddb import TempusDDB, gen_keys
@@ -87,7 +88,7 @@ def test_invalid_keyfile_raises(tmp_path):
     bad_key.write_text('{"not": "valid"}')
 
     with pytest.raises(Exception):
-        TempusDDB("tmb_live_test", str(db_path), str(bad_key))
+        TempusDDB(str(db_path), str(bad_key))
 
 
 def test_record_without_genesis_fails_without_parent(tmp_path):
@@ -115,12 +116,13 @@ def test_validate_detects_tampering(tmp_path):
 
     db.record(json.dumps({"original": True}), json.dumps({}), genesis=True)
 
-    # Tamper with the DB file (simulates corruption)
-    with open(db_path, "ab") as f:
-        f.write(b"\x00corrupt")
+    # Tamper with a persisted decision while leaving the signature unchanged.
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("UPDATE decisions SET payload = ?", (json.dumps({"original": False}),))
 
-    validation = db.validate()
-    val_str = str(validation).lower()
+    with pytest.raises(Exception) as exc:
+        db.validate()
+    val_str = str(exc.value).lower()
     # It should report something wrong
     assert "invalid" in val_str or "error" in val_str or "mismatch" in val_str
 
@@ -141,20 +143,22 @@ def test_record_accepts_both_string_and_dict_like(tmp_path):
     assert result is not None
 
 
-def test_idempotency_like_behavior(tmp_path):
-    """Basic check that repeated identical genesis with different calls still work (idempotency handled at MCP layer)."""
+def test_second_genesis_fails_without_idempotency(tmp_path):
+    """Idempotency keys are not implemented; a second genesis must be rejected."""
     keyfile = tmp_path / "keys.json"
     db_path = tmp_path / "test.db"
     gen_keys(str(keyfile))
     db = TempusDDB(str(db_path), str(keyfile))
 
-    p = json.dumps({"action": "idempotent_test"})
+    p = json.dumps({"action": "second_genesis_test"})
     r = json.dumps({})
 
     res1 = db.record(p, r, genesis=True)
-    res2 = db.record(p, r, genesis=True)  # Should still succeed or be handled upper layer
+    assert res1 is not None
 
-    assert res1 is not None and res2 is not None
+    with pytest.raises(Exception) as exc:
+        db.record(p, r, genesis=True)
+    assert "genesis" in str(exc.value).lower() or "exists" in str(exc.value).lower()
 
 
 def test_validate_on_empty_or_single_record(tmp_path):
