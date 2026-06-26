@@ -1,13 +1,29 @@
+# Build artifacts
 /target
+/build
+/dist
+*.egg-info/
+*.pyd
+*.so
+*.dll
+*.exe
+
+# Data / runtime files
 *.db
 *.json
-tempus_sdk/
-__pycache__/
-.venv*
-.env
+!pyproject.toml
+!package.json
 server_secret.key
 keys.json
 agent_wallet.json
+tempus.db
 
-# Internal / not for public repo
+# Python
+__pycache__/
+.venv*
+.env
+*.pyc
+
+# Other
+tempus_sdk/
 ROADMAP.md
