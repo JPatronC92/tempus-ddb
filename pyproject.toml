@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "tempus_ddb"
 version = "0.1.0"
-description = "Tempus DDB - Tamper-proof Decision Ledger for AI Agents"
+description = "Tempus DDB - The Tamper-Proof Flight Recorder for AI Agents"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
