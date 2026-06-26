@@ -23,8 +23,7 @@ def main():
     print(f"Keys saved to {KEY_PATH}")
 
     print("\n=== Initializing ledger ===")
-    # License string is required by the Rust core but handled transparently
-    db = TempusDDB("tmb_live_local_dev", DB_PATH, KEY_PATH)
+    db = TempusDDB(DB_PATH, KEY_PATH)
     print(f"Ledger created at {DB_PATH}")
 
     print("\n=== Recording genesis decision ===")
@@ -43,10 +42,6 @@ def main():
     result1 = db.record(payload1, rules1, genesis=True)
     print("Result:", result1)
 
-    # Extract hash for chaining
-    result_data = json.loads(result1) if isinstance(result1, str) else result1
-    parent_hash = result_data.get("latest_hash") or result_data.get("output", {}).get("latest_hash")
-
     print("\n=== Recording follow-up decision ===")
     payload2 = json.dumps({
         "action": "execute_payment",
@@ -56,7 +51,7 @@ def main():
     })
     rules2 = json.dumps({
         "budget_id": "Q3-2024-marketing",
-        "approval_hash": parent_hash
+        "approved_by": "finance_lead"
     })
 
     result2 = db.record(payload2, rules2, genesis=False)
