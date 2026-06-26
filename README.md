@@ -141,24 +141,29 @@ Running `tempus_validate` replays the entire chain and checks every signature an
 
 ---
 
-## CLI Reference & Improvements (Work in Progress)
+## CLI Reference
 
-Current commands:
+Current commands (available after `pip install -e .`):
 
 ```bash
 tempus init          # Bootstrap keys + database
-tempus mcp start     # Launch MCP server for agents
+tempus mcp start     # Launch MCP server for agents (stdio)
 tempus verify        # Full cryptographic validation
+tempus status        # Show keys, DB and chain status
+tempus record        # Record a decision directly from CLI
+tempus --version     # Show version
 ```
 
-We are improving the CLI right now (task D). Planned / in-progress:
+Example of direct record:
 
-- `tempus record` — direct CLI recording (payload + rules from file or stdin)
-- `tempus version`
-- `tempus status` — show last record, key info, etc.
-- Nicer colored output and better error messages
+```bash
+tempus record \
+  --payload '{"action": "update_config", "key": "timeout", "value": 30}' \
+  --rules '{"max_value": 300}' \
+  --genesis
+```
 
-See the CLI source for latest or run `tempus --help`.
+> Note: If you see legacy "B2A" commands after install, run `pip install -e . --force-reinstall --no-deps` to pick up the latest source.
 
 ---
 
@@ -186,9 +191,13 @@ See the CLI source for latest or run `tempus --help`.
 
 ## Roadmap
 
-See the complete **executable roadmap** in [ROADMAP.md](ROADMAP.md).
+See the high-level roadmap in the project issues or contact the maintainers for the latest internal roadmap.
 
-Current sprint focus: A + B + D (product definition, docs, CLI + examples) as requested.
+Focus areas:
+- CLI & DX improvements (in progress)
+- Packaging & distribution
+- Production readiness & tests
+- Ecosystem examples (LangGraph, CrewAI, etc.)
 
 ---
 

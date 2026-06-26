@@ -8,3 +8,6 @@ __pycache__/
 server_secret.key
 keys.json
 agent_wallet.json
+
+# Internal / not for public repo
+ROADMAP.md
