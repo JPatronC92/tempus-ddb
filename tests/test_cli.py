@@ -132,8 +132,12 @@ def test_cli_verify_reports_error_on_corrupt(tmp_path):
     run_cli(["init"], cwd=tmp_path)
     run_cli(["record", "--payload", "{}", "--rules", "{}", "--genesis"], cwd=tmp_path)
     db = tmp_path / "tempus.db"
-    with sqlite3.connect(db) as conn:
+    conn = sqlite3.connect(db)
+    try:
         conn.execute("UPDATE decisions SET payload = ?", ('{"tampered":true}',))
+        conn.commit()
+    finally:
+        conn.close()
 
     code, out, err = run_cli(["verify"], cwd=tmp_path)
     combined = (out + err).lower()
