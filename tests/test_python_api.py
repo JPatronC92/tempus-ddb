@@ -117,8 +117,12 @@ def test_validate_detects_tampering(tmp_path):
     db.record(json.dumps({"original": True}), json.dumps({}), genesis=True)
 
     # Tamper with a persisted decision while leaving the signature unchanged.
-    with sqlite3.connect(db_path) as conn:
+    conn = sqlite3.connect(db_path)
+    try:
         conn.execute("UPDATE decisions SET payload = ?", (json.dumps({"original": False}),))
+        conn.commit()
+    finally:
+        conn.close()
 
     with pytest.raises(Exception) as exc:
         db.validate()

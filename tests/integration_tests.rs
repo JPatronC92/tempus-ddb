@@ -1,6 +1,6 @@
 use serde_json::Value;
 use std::process::Command;
-use tempfile::NamedTempFile;
+use tempfile::tempdir;
 
 // Run the tempus-ddb binary
 fn run_cli(args: &[&str]) -> (bool, String, String) {
@@ -17,11 +17,11 @@ fn run_cli(args: &[&str]) -> (bool, String, String) {
 
 #[test]
 fn test_end_to_end_flow() {
-    let db_file = NamedTempFile::new().unwrap();
-    let db_path = db_file.path().to_str().unwrap();
-
-    let key_file = NamedTempFile::new().unwrap();
-    let key_path = key_file.path().to_str().unwrap();
+    let dir = tempdir().unwrap();
+    let db_path_buf = dir.path().join("db.sqlite");
+    let key_path_buf = dir.path().join("keys.json");
+    let db_path = db_path_buf.to_str().unwrap();
+    let key_path = key_path_buf.to_str().unwrap();
 
     // Init DB
     let (success, _, _) = run_cli(&["init", "--db", db_path]);
