@@ -760,6 +760,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "pyo3",
+ "pyo3-build-config",
  "rand",
  "rand_core",
  "rusqlite",

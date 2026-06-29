@@ -22,6 +22,7 @@ def test_examples_run_successfully(tmp_path):
         if not env.get("PYTHONPATH")
         else f"{python_path}{os.pathsep}{env['PYTHONPATH']}"
     )
+    env["PYTHONIOENCODING"] = "utf-8"
 
     for example in EXAMPLES:
         result = subprocess.run(
@@ -29,6 +30,7 @@ def test_examples_run_successfully(tmp_path):
             cwd=tmp_path,
             env=env,
             text=True,
+            encoding="utf-8",
             capture_output=True,
             check=False,
         )
