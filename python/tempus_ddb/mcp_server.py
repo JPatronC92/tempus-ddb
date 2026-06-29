@@ -23,7 +23,7 @@ def validate_path(path: str) -> str:
     return resolved
 
 # ── Import PyO3 native module ────────────────
-import tempus_ddb
+from ._tempus_ddb import TempusDDB, gen_keys
 
 # ── Input validation helpers ─────────────────────────────────────
 def validate_json_string(value: str, field_name: str) -> None:
@@ -118,7 +118,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "tempus_init":
             db_path = validate_path(arguments.get("db", "tempus.db"))
-            db = tempus_ddb.TempusDDB(db_path, "keys.json")
+            db = TempusDDB(db_path, "keys.json")
             return [TextContent(type="text", text=json.dumps({
                 "status": "success",
                 "message": f"Database initialized: {db_path}",
@@ -127,7 +127,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "tempus_gen_keys":
             output_file = validate_path(arguments.get("output", "keys.json"))
-            output = tempus_ddb.gen_keys(output_file)
+            output = gen_keys(output_file)
             try:
                 output_json = json.loads(output)
             except Exception:
@@ -150,7 +150,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             genesis = arguments.get("genesis", False)
 
-            db_instance = tempus_ddb.TempusDDB(db, keyfile)
+            db_instance = TempusDDB(db, keyfile)
             output = db_instance.record(payload, rules, genesis)
 
             result = {
@@ -164,7 +164,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "tempus_validate":
             db_path = validate_path(arguments.get("db", "tempus.db"))
-            db = tempus_ddb.TempusDDB(db_path, "keys.json")
+            db = TempusDDB(db_path, "keys.json")
             try:
                 output = db.validate()
                 out_str = str(output).lower()

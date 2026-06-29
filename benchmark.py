@@ -1,36 +1,61 @@
 import time
 import os
 import json
+import argparse
+import tempfile
 from tempus_ddb import TempusDDB
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(BASE_DIR, "benchmark.db")
-keys_path = os.path.join(BASE_DIR, "keys.json")
-
-# Limpiamos archivos anteriores
-for f in [db_path, keys_path]:
-    if os.path.exists(f):
-        os.remove(f)
-
-# Inicializamos (asegúrate de que tu Rust genere las keys si no existen, o genéralas antes)
 import tempus_ddb
-if not os.path.exists(keys_path):
-    tempus_ddb.gen_keys(keys_path)
 
-db = TempusDDB(db_path, keys_path)
+def run_benchmark(records: int, json_output: bool):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "benchmark.db")
+        keys_path = os.path.join(tmpdir, "keys.json")
 
-print("🔥 Iniciando benchmark de 1,000 decisiones inmutables...")
-start_time = time.time()
+        tempus_ddb.gen_keys(keys_path)
+        db = TempusDDB(db_path, keys_path)
 
-for i in range(1000):
-    payload = json.dumps({"accion": "lectura", "sensor": i})
-    rules = json.dumps({"limite": 100})
-    # Solo el primero es génesis
-    db.record(payload, rules, genesis=(i == 0))
+        if not json_output:
+            print(f"🔥 Iniciando benchmark de {records} decisiones inmutables...")
+        
+        start_time = time.time()
 
-end_time = time.time()
-duracion = end_time - start_time
+        for i in range(records):
+            payload = json.dumps({"accion": "lectura", "sensor": i})
+            rules = json.dumps({"limite": 100})
+            db.record(payload, rules, genesis=(i == 0))
 
-print(f"✅ 1,000 registros procesados y sellados criptográficamente.")
-print(f"⏱️ Tiempo total: {duracion:.2f} segundos.")
-print(f"🚀 Velocidad: {1000 / duracion:.2f} decisiones por segundo.")
+        end_time = time.time()
+        
+        # Validation phase
+        val_start = time.time()
+        val_result = db.validate()
+        val_end = time.time()
+        
+        duracion = end_time - start_time
+        val_duracion = val_end - val_start
+        
+        # Verify validation actually passed
+        val_str = str(val_result).lower()
+        is_valid = "invalid" not in val_str and "error" not in val_str
+
+        if json_output:
+            print(json.dumps({
+                "records": records,
+                "duration_seconds": duracion,
+                "throughput_per_sec": records / duracion if duracion > 0 else 0,
+                "validation_duration_seconds": val_duracion,
+                "is_valid": is_valid
+            }))
+        else:
+            print(f"✅ {records} registros procesados y sellados criptográficamente.")
+            print(f"⏱️ Tiempo de inserción: {duracion:.2f} segundos.")
+            print(f"🚀 Velocidad: {records / duracion:.2f} decisiones por segundo.")
+            print(f"🔍 Tiempo de validación: {val_duracion:.2f} segundos (Válido: {is_valid}).")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Tempus DDB Benchmark")
+    parser.add_argument("--records", type=int, default=1000, help="Number of records to benchmark")
+    parser.add_argument("--json", action="store_true", help="Output results as JSON")
+    args = parser.parse_args()
+    
+    run_benchmark(args.records, args.json)

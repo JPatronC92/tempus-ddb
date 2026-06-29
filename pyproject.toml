@@ -30,7 +30,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-asyncio",
     "maturin",
+    "ruff",
 ]
 keywords = ["ai", "agents", "ledger", "audit", "cryptography", "mcp", "tamper-evident"]
 

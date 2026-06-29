@@ -19,9 +19,20 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Check Rust formatting
         run: cargo fmt --check
+
+      - name: Run Cargo Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run Cargo Audit
+        run: cargo audit
 
       - name: Run Rust tests
         env:
@@ -49,10 +60,10 @@ jobs:
       - name: Install Python test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest
+          python -m pip install -e .[dev]
 
-      - name: Build and install editable Python package
-        run: python -m pip install -e .
+      - name: Run Ruff
+        run: ruff check .
 
       - name: Run Python tests
         run: python -m pytest tests/ -vv --tb=long -ra
