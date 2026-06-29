@@ -19,7 +19,8 @@ def run_cli(args, cwd=None):
     cmd = [sys.executable, "-m", "tempus_ddb.cli"] + args
     env = os.environ.copy()
     env["PYTHONPATH"] = str(Path(__file__).parent.parent / "python")
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
+    env["PYTHONIOENCODING"] = "utf-8"
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env, encoding="utf-8")
     return result.returncode, result.stdout, result.stderr
 
 
