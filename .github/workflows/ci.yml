@@ -30,6 +30,8 @@ jobs:
 
   python:
     runs-on: ${{ matrix.os }}
+    env:
+      PYTHONIOENCODING: utf-8
     strategy:
       fail-fast: false
       matrix:
