@@ -4,8 +4,12 @@ import os
 import json
 from .mcp_server import main_sync
 from ._tempus_ddb import TempusDDB, gen_keys
+import importlib.metadata
 
-__version__ = "0.2.0-dev"  # update on releases
+try:
+    __version__ = importlib.metadata.version("tempus_ddb")
+except importlib.metadata.PackageNotFoundError:
+    __version__ = "unknown"
 
 def run_init():
     keyfile = "keys.json"
