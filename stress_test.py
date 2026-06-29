@@ -48,14 +48,16 @@ print()
 
 print("4. Tampering with the database (Simulating data manipulation)...")
 conn = sqlite3.connect(DB_PATH)
-cursor = conn.cursor()
-cursor.execute("SELECT id, payload FROM decisions WHERE causal_depth = 25")
-row = cursor.fetchone()
-original_id, original_payload = row
-new_payload = json.dumps({"action": "sensor_read", "iteration": 25, "value": 99999.9}) # Malicious modification
-cursor.execute("UPDATE decisions SET payload = ? WHERE id = ?", (new_payload, original_id))
-conn.commit()
-conn.close()
+try:
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, payload FROM decisions WHERE causal_depth = 25")
+    row = cursor.fetchone()
+    original_id, original_payload = row
+    new_payload = json.dumps({"action": "sensor_read", "iteration": 25, "value": 99999.9}) # Malicious modification
+    cursor.execute("UPDATE decisions SET payload = ? WHERE id = ?", (new_payload, original_id))
+    conn.commit()
+finally:
+    conn.close()
 
 print(f"Malicious update executed on depth 25.")
 print(f"Old payload: {original_payload}")
