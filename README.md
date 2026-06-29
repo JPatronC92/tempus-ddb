@@ -143,7 +143,8 @@ Running `tempus_validate` replays the entire chain and checks every signature an
 
 ## CLI Reference
 
-Current commands (available after `pip install -e .`):
+### Official Python CLI (`tempus`)
+The primary interface for developers and users. Installed via `pip install tempus_ddb`.
 
 ```bash
 tempus init          # Bootstrap keys + database
@@ -163,7 +164,19 @@ tempus record \
   --genesis
 ```
 
-> Note: If you see legacy "B2A" commands after install, run `pip install -e . --force-reinstall --no-deps` to pick up the latest source.
+### Internal Core CLI (`tempus-ddb`)
+If you build the Rust core directly (`cargo build`), you will get an internal binary `tempus-ddb`. This is mostly a thin wrapper for development, debugging, and the `tamper_demo_rust_cli.py` stress test. For production usage, always use the `tempus` Python CLI or the TempusDDB class directly.
+
+---
+
+## Tamper Detection Demo
+
+You can run the interactive tamper detection test to see how the ledger catches malicious manipulation:
+
+```bash
+python tamper_demo_rust_cli.py
+```
+This script creates a valid causal chain of 50 records, directly modifies a payload via SQLite without updating the cryptographic hash or signature, and then proves that Tempus DDB immediately catches the breach.
 
 ---
 
@@ -183,6 +196,7 @@ tempus record \
 ## Security Model
 
 - Only the holder of the private key in `keyfile` can create valid signed records.
+- **⚠️ WARNING:** Your `keyfile` (e.g., `keys.json`) contains the raw Ed25519 private key. **Do not commit this file to version control**. Exposing it completely compromises the integrity of the ledger, allowing an attacker to forge records.
 - Hash chaining + signatures → any modification is immediately detectable.
 - Fully local by default — nothing leaves the machine.
 - The core has no license gate. It is fully open.
