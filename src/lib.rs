@@ -1,5 +1,5 @@
 #[cfg(not(target_arch = "wasm32"))]
-use pyo3::exceptions::{PyIOError, PyPermissionError, PyRuntimeError};
+use pyo3::exceptions::{PyPermissionError, PyRuntimeError};
 #[cfg(not(target_arch = "wasm32"))]
 use pyo3::prelude::*;
 
@@ -74,7 +74,7 @@ use ed25519_dalek::Signer;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct Decision {
+pub struct Decision {
     id: String,
     parent_id: String,
     causal_depth: u64,
@@ -151,13 +151,13 @@ impl SqliteStorage {
     }
 
     /// Compute the canonical SHA-256 hash for a decision (matches main.rs logic).
-    fn calculate_canonical_hash(
+    pub fn calculate_canonical_hash(
         parent_id: &str,
         actor_id: &str,
         timestamp: u64,
         payload: &str,
         rules_evaluated: &str,
-    ) -> [u8; 32] {
+    ) -> Result<[u8; 32], String> {
         #[derive(Serialize)]
         struct CanonicalPayload<'a> {
             parent_id: &'a str,
@@ -168,9 +168,9 @@ impl SqliteStorage {
         }
 
         let payload_val: serde_json::Value =
-            serde_json::from_str(payload).unwrap_or(serde_json::Value::Null);
+            serde_json::from_str(payload).map_err(|e| format!("Invalid payload JSON: {}", e))?;
         let rules_val: serde_json::Value =
-            serde_json::from_str(rules_evaluated).unwrap_or(serde_json::Value::Null);
+            serde_json::from_str(rules_evaluated).map_err(|e| format!("Invalid rules JSON: {}", e))?;
 
         let canonical = CanonicalPayload {
             parent_id,
@@ -184,7 +184,7 @@ impl SqliteStorage {
 
         let mut hasher = Sha256::new();
         hasher.update(&canonical_bytes);
-        hasher.finalize().into()
+        Ok(hasher.finalize().into())
     }
 
     fn get_last_decision_conn(conn: &rusqlite::Connection) -> Result<Option<Decision>, String> {
@@ -263,20 +263,36 @@ impl SqliteStorage {
 
         use std::collections::HashMap;
         let mut decision_map = HashMap::new();
+        let mut genesis_count = 0;
         for d in &decisions {
             decision_map.insert(d.id.clone(), d.clone());
+            if d.parent_id == "genesis" {
+                genesis_count += 1;
+            }
         }
 
         let mut errors = Vec::new();
 
+        if !decisions.is_empty() && genesis_count == 0 {
+            errors.push("No genesis decision found in the ledger.".to_string());
+        } else if genesis_count > 1 {
+            errors.push(format!("Multiple genesis decisions found ({}). Only one is allowed.", genesis_count));
+        }
+
         for d in &decisions {
-            let computed_hash = Self::calculate_canonical_hash(
+            let computed_hash = match Self::calculate_canonical_hash(
                 &d.parent_id,
                 &d.actor_id,
                 d.timestamp,
                 &d.payload,
                 &d.rules_evaluated,
-            );
+            ) {
+                Ok(h) => h,
+                Err(e) => {
+                    errors.push(format!("Decision '{}' hash calculation error: {}", d.id, e));
+                    continue;
+                }
+            };
             let computed_id = hex::encode(computed_hash);
             if computed_id != d.id {
                 errors.push(format!(
@@ -453,7 +469,7 @@ impl StorageLayer for SqliteStorage {
 
         // Compute the deterministic SHA-256 hash
         let hash_bytes =
-            Self::calculate_canonical_hash(&parent_id, &actor_id, timestamp, payload, rules);
+            Self::calculate_canonical_hash(&parent_id, &actor_id, timestamp, payload, rules)?;
         let id = hex::encode(hash_bytes);
 
         // Ed25519 signature of the hash
@@ -592,8 +608,7 @@ impl TempusDDB {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-#[pyfunction]
-pub fn gen_keys(output: String) -> PyResult<String> {
+pub fn generate_keypair(output: &str) -> Result<String, String> {
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
     use std::fs::File;
@@ -615,24 +630,30 @@ pub fn gen_keys(output: String) -> PyResult<String> {
     };
 
     let json_str = serde_json::to_string_pretty(&config)
-        .map_err(|e| PyRuntimeError::new_err(format!("Serialization error: {}", e)))?;
+        .map_err(|e| format!("Serialization error: {}", e))?;
 
-    let mut file = File::create(&output)
-        .map_err(|e| PyIOError::new_err(format!("Error creating key file {}: {}", output, e)))?;
+    let mut file = File::create(output)
+        .map_err(|e| format!("Error creating key file {}: {}", output, e))?;
 
     file.write_all(json_str.as_bytes())
-        .map_err(|e| PyIOError::new_err(format!("Error writing key file {}: {}", output, e)))?;
+        .map_err(|e| format!("Error writing key file {}: {}", output, e))?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let perms = std::fs::Permissions::from_mode(0o600);
-        if let Err(e) = std::fs::set_permissions(&output, perms) {
+        if let Err(e) = std::fs::set_permissions(output, perms) {
             eprintln!("Warning: Could not set key file permissions: {}", e);
         }
     }
 
     Ok(json_str)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[pyfunction]
+pub fn gen_keys(output: String) -> PyResult<String> {
+    generate_keypair(&output).map_err(|e| PyRuntimeError::new_err(e))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
