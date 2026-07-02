@@ -1,7 +1,7 @@
 """
 Example: Record multiple decisions and verify the full causal chain.
 
-This demonstrates the immutable audit trail capability.
+This demonstrates the tamper-evident audit trail capability.
 """
 
 import json

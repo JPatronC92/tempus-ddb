@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand};
 use serde_json::Value;
 
 #[derive(Parser)]
-#[command(name = "tempus-ddb")]
-#[command(about = "Tempus DDB Core (Edge Version) - Internal Demo CLI", long_about = None)]
+#[command(name = "tempus-ddb-core")]
+#[command(about = "Tempus DDB Core - INTERNAL DEV CLI (Use the Python `tempus` CLI for production)", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

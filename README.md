@@ -24,7 +24,7 @@
 
 **Tempus DDB** is a **free, local-first, offline-by-default, cryptographically verifiable decision ledger** for autonomous AI agents and agentic systems.
 
-It functions as an **immutable Flight Recorder**: agents can record critical decisions with Ed25519 digital signatures and a hash-chained causal structure. This produces a tamper-evident audit trail that can be independently verified at any time.
+It functions as a **tamper-evident Flight Recorder**: agents can record critical decisions with Ed25519 digital signatures and a hash-chained causal structure. This produces a tamper-evident audit trail that can be independently verified at any time.
 
 ### Official One-Liner
 > Give your AI agents a memory they cannot rewrite.

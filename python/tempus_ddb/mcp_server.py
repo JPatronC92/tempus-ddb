@@ -130,6 +130,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             output = gen_keys(output_file)
             try:
                 output_json = json.loads(output)
+                if isinstance(output_json, dict) and "private_key" in output_json:
+                    del output_json["private_key"]
             except Exception:
                 output_json = output
             return [TextContent(type="text", text=json.dumps({
