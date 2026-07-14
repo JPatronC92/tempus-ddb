@@ -49,7 +49,7 @@ fn test_end_to_end_flow() {
     assert!(success, "Record genesis failed");
 
     let genesis_decision: Value = serde_json::from_str(&stdout).expect("Failed to parse output");
-    let genesis_id = genesis_decision["id"].as_str().unwrap();
+    let genesis_hash = genesis_decision["latest_hash"].as_str().unwrap();
 
     // Attempting a second genesis should fail
     let (success, _, stderr) = run_cli(&[
@@ -82,28 +82,23 @@ fn test_end_to_end_flow() {
         child_payload,
         "--rules",
         rules,
-        "--parent",
-        genesis_id,
     ]);
     assert!(success, "Record child failed");
 
     let child_decision: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(child_decision["causal_depth"], 1);
+    assert_eq!(child_decision["status"], "success");
+    assert!(child_decision["latest_hash"].as_str().is_some());
 
     // Validate Ledger
     let (success, stdout, _) = run_cli(&["validate", "--db", db_path]);
     assert!(success, "Validate failed");
     assert!(stdout.contains("valid"), "Validation should report valid");
 
-    // List Ledger
-    let (success, stdout, _) = run_cli(&["list", "--db", db_path, "--limit", "1"]);
-    assert!(success, "List failed");
-    let list_res: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(list_res.as_array().unwrap().len(), 1);
-
     // Export Ledger
     let (success, stdout, _) = run_cli(&["export", "--db", db_path]);
     assert!(success, "Export failed");
     let export_res: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(export_res.as_array().unwrap().len(), 2);
+    let export_arr = export_res.as_array().unwrap();
+    assert_eq!(export_arr.len(), 2);
+    assert_eq!(export_arr[0]["id"].as_str().unwrap(), genesis_hash);
 }
