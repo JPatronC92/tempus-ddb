@@ -203,16 +203,24 @@ This script creates a valid causal chain of 50 records, directly modifies a payl
 
 ---
 
-## Roadmap
+## Commercial Opportunities & Business Models
 
-See the high-level roadmap in the project issues or contact the maintainers for the latest internal roadmap.
+While Tempus DDB core is free, open-source, and local-first, the architecture naturally supports highly profitable enterprise scaling models:
 
-Focus areas:
-- Stabilizing the free/open-source local ledger beta
-- CLI & DX improvements (in progress)
-- Packaging & distribution
-- Production readiness & tests
-- Ecosystem examples (LangGraph, CrewAI, etc.)
+### 1. Tempus Cloud (Multi-Agent Sync & Backup)
+Local ledgers (`tempus.db`) are great for single agents, but enterprise deployments with hundreds of autonomous agents need consolidation. Tempus Cloud is a premium SaaS that synchronizes, backs up, and aggregates local ledgers into a secure, centralized vault for real-time observability and cross-agent consensus.
+
+### 2. Cryptographic Anchoring (The "Gas" Model)
+To prevent catastrophic data loss or malicious ledger deletion (e.g., if a server is wiped), enterprises need irrefutable proof of state. Tempus offers a premium API service that periodically anchors the latest ledger hash to public blockchains (Ethereum, Base, Solana). We charge a micro-transaction fee for every public timestamp, acting as a decentralized notary.
+
+### 3. Enterprise Compliance Dashboard (SIEM Integration)
+Auditors and Compliance Officers need human-readable interfaces, not JSON files in a terminal. The Enterprise License includes a rich web dashboard that connects to `tempus.db`, sets up real-time alerts for high-stakes financial decisions, generates PDF audit reports, and integrates seamlessly with corporate security tools like Splunk or Datadog.
+
+### 4. Dispute Resolution as a Service
+As B2A (Business-to-Agent) transactions scale, agents will inevitably dispute outcomes (e.g., "My agent paid, but yours didn't deliver the code"). By standardizing on Tempus DDB, we can offer automated, cryptographic arbitration services that read both agents' ledgers, verify signatures, and issue neutral, legally-binding verdicts for an arbitration fee.
+
+### 5. Agentic Payment Gateway ("Stripe for AI")
+Tempus DDB is already the layer where agents use cryptographic keys (Ed25519) to sign critical decisions. A premium module will bridge these signatures directly to smart contracts (USDC) or fiat banking APIs. This allows Tempus to process the actual financial movement triggered by the decision and capture a percentage fee per transaction.
 
 ## WASM Status
 
