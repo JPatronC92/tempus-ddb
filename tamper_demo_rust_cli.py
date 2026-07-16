@@ -70,7 +70,7 @@ def main():
         finally:
             conn.close()
         
-        print(f"Malicious update executed on depth 25.")
+        print("Malicious update executed on depth 25.")
         print(f"Old payload: {original_payload}")
         print(f"New payload: {new_payload}\n")
         

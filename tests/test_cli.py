@@ -9,16 +9,18 @@ import os
 import subprocess
 import sys
 import sqlite3
+import time
 from pathlib import Path
-
-import pytest
-
 
 def run_cli(args, cwd=None):
     """Run the tempus CLI and return (returncode, stdout, stderr)."""
     cmd = [sys.executable, "-m", "tempus_ddb.cli"] + args
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(Path(__file__).parent.parent / "python")
+    source_path = str(Path(__file__).parent.parent / "python")
+    if env.get("PYTHONPATH"):
+        env["PYTHONPATH"] = env["PYTHONPATH"] + os.pathsep + source_path
+    else:
+        env["PYTHONPATH"] = source_path
     env["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env, encoding="utf-8")
     return result.returncode, result.stdout, result.stderr
@@ -34,6 +36,7 @@ def test_cli_help():
     code, out, _ = run_cli(["--help"])
     assert code == 0
     assert "init" in out and "record" in out and "status" in out and "verify" in out
+    assert "request-action" in out and "commit-outcome" in out and "verify-trace" in out
 
 
 def test_cli_init_creates_files(tmp_path):
@@ -42,6 +45,17 @@ def test_cli_init_creates_files(tmp_path):
     assert (tmp_path / "keys.json").exists()
     assert (tmp_path / "tempus.db").exists()
     assert "ready" in out.lower()
+
+
+def test_cli_keygen_is_machine_readable_and_refuses_overwrite(tmp_path):
+    code, out, err = run_cli(["keygen", "--output", "agent.keys.json"], cwd=tmp_path)
+    assert code == 0, out + err
+    payload = json.loads(out)
+    assert payload["schema_version"] == "tempus.identity-key.v1"
+    assert len(payload["public_key"]) == 64
+    code, out, err = run_cli(["keygen", "--output", "agent.keys.json"], cwd=tmp_path)
+    assert code != 0
+    assert "overwrite" in (out + err).lower()
 
 
 def test_cli_status_before_and_after_init(tmp_path):
@@ -149,3 +163,74 @@ def test_cli_status_shows_helpful_next_steps(tmp_path):
     code, out, _ = run_cli(["status"], cwd=tmp_path)
     assert code == 0
     assert "Next steps" in out or "init" in out.lower()
+
+
+def test_cli_b2a_authorization_execution_flow(tmp_path):
+    from tempus_ddb import gen_keys
+
+    code, out, err = run_cli(["init"], cwd=tmp_path)
+    assert code == 0, out + err
+    agent_keyfile = tmp_path / "agent.keys.json"
+    executor_keyfile = tmp_path / "executor.keys.json"
+    gen_keys(str(agent_keyfile))
+    gen_keys(str(executor_keyfile))
+    agent_id = json.loads(agent_keyfile.read_text())["public_key"]
+
+    for alias, keyfile in [
+        ("buyer-agent", agent_keyfile),
+        ("purchase-executor", executor_keyfile),
+    ]:
+        code, out, err = run_cli(
+            ["register-agent", "--alias", alias, "--agent-keyfile", str(keyfile)],
+            cwd=tmp_path,
+        )
+        assert code == 0, out + err
+
+    intent = json.dumps({
+        "schema_version": "tempus.action-intent.v1",
+        "tenant_id": "cli-test",
+        "agent_id": agent_id,
+        "idempotency_key": "cli-action-001",
+        "action_type": "send_email",
+        "resource": "mailbox/outbox",
+        "requested_at": time.time_ns() // 1_000,
+        "input": {"to": "ops@example.com"},
+    })
+    code, out, err = run_cli(
+        [
+            "request-action",
+            "--intent", intent,
+            "--agent-keyfile", str(agent_keyfile),
+        ],
+        cwd=tmp_path,
+    )
+    assert code == 0, out + err
+    authorization = json.loads(out)
+    assert authorization["authorization"]["decision"] == "ALLOWED"
+    authorization_id = authorization["authorization"]["authorization_id"]
+    action_id = authorization["authorization"]["action_id"]
+
+    outcome = json.dumps({
+        "schema_version": "tempus.action-outcome.v1",
+        "authorization_id": authorization_id,
+        "action_id": action_id,
+        "status": "SUCCEEDED",
+        "external_reference": "mail-42",
+    })
+    code, out, err = run_cli(
+        [
+            "commit-outcome",
+            "--authorization-id", authorization_id,
+            "--outcome", outcome,
+            "--executor-keyfile", str(executor_keyfile),
+        ],
+        cwd=tmp_path,
+    )
+    assert code == 0, out + err
+    assert json.loads(out)["receipt"]["status"] == "SUCCEEDED"
+
+    code, out, err = run_cli(["verify-trace", "--action-id", action_id], cwd=tmp_path)
+    assert code == 0, out + err
+    verification = json.loads(out)
+    assert verification["status"] == "VERIFIED"
+    assert verification["phase"] == "COMPLETED"

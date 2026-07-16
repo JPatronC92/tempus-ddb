@@ -23,6 +23,20 @@ def _resolve_paths(args):
     return db, keyfile
 
 
+def _load_json_argument(value, label):
+    """Load a JSON object from a literal string or a file path."""
+    if os.path.isfile(value):
+        with open(value, encoding="utf-8") as handle:
+            value = handle.read().strip()
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"--{label} must be valid JSON or a path to a JSON file: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"--{label} must contain a JSON object")
+    return json.dumps(parsed, separators=(",", ":"), sort_keys=True)
+
+
 def run_init(args):
     db_path, keyfile = _resolve_paths(args)
 
@@ -43,12 +57,39 @@ def run_init(args):
 
     try:
         db = TempusDDB(db_path, keyfile)
+        identity = json.loads(db.whoami())
+        gate_id = identity["public_key"]
+        if not db.verify_agent(gate_id):
+            db.register_agent(
+                gate_id,
+                "tempus-gate",
+                json.dumps({"can_delegate": True, "role": "gate"}),
+            )
         print("✓ Tempus DDB ready.")
         print(f"  Keys:  {keyfile}")
         print(f"  DB:    {db_path}")
     except Exception as e:
         print(f"✗ Failed to initialize database: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def run_keygen(args):
+    """Generate a workload keypair for an agent, executor, or gate."""
+    if os.path.exists(args.output):
+        print(f"✗ Refusing to overwrite existing key file: {args.output}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        result = json.loads(gen_keys(args.output))
+        result.pop("private_key", None)
+        print(json.dumps({
+            "schema_version": "tempus.identity-key.v1",
+            "keyfile": args.output,
+            "public_key": result["public_key"],
+        }, indent=2))
+    except Exception as exc:
+        print(f"✗ Key generation failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
 
 def run_verify(args):
     db_path, keyfile = _resolve_paths(args)
@@ -112,8 +153,8 @@ def run_status(args):
             try:
                 count = db.count()
                 print(f"  Total decisions: {count}")
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"  Total decisions: unavailable ({exc})")
 
             # Try to show last hash if present in result
             try:
@@ -125,8 +166,8 @@ def run_status(args):
                     last_hash = data.get("latest_hash") or data.get("result", {}).get("latest_hash")
                     if last_hash:
                         print(f"  Latest hash: {last_hash}")
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"  Latest hash: unavailable ({exc})")
 
         except Exception as e:
             print(f"✗ Could not validate database: {e}")
@@ -135,7 +176,7 @@ def run_status(args):
 
     print("\nNext steps if needed:")
     print("  tempus init     # to initialize")
-    print("  tempus record   # to record a decision")
+    print("  tempus request-action  # obtain a signed execution permit")
 
 def run_record(args):
     """Direct CLI recording (task D improvement)."""
@@ -324,13 +365,57 @@ def run_whoami(args):
         sys.exit(1)
 
 
+def run_request_action(args):
+    """Request a fail-closed, single-use authorization for an agent action."""
+    db_path, gate_keyfile = _resolve_paths(args)
+    try:
+        intent = _load_json_argument(args.intent, "intent")
+        db = TempusDDB(db_path, gate_keyfile)
+        result = db.request_action(intent, args.agent_keyfile, args.ttl_seconds)
+        print(json.dumps(json.loads(result), indent=2))
+    except Exception as exc:
+        print(f"✗ Authorization request failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_commit_outcome(args):
+    """Consume an authorization permit with a signed executor outcome."""
+    db_path, gate_keyfile = _resolve_paths(args)
+    try:
+        outcome = _load_json_argument(args.outcome, "outcome")
+        db = TempusDDB(db_path, gate_keyfile)
+        result = db.commit_outcome(
+            args.authorization_id,
+            outcome,
+            args.executor_keyfile,
+        )
+        print(json.dumps(json.loads(result), indent=2))
+    except Exception as exc:
+        print(f"✗ Outcome commit failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_trace(args, *, verify=False):
+    """Read or verify a B2A action trace."""
+    db_path, gate_keyfile = _resolve_paths(args)
+    try:
+        db = TempusDDB(db_path, gate_keyfile)
+        result = db.verify_trace(args.action_id) if verify else db.get_trace(args.action_id)
+        parsed = json.loads(result)
+        print(json.dumps(parsed, indent=2))
+        if verify and parsed.get("status") == "INVALID":
+            sys.exit(2)
+    except Exception as exc:
+        print(f"✗ Trace {'verification' if verify else 'lookup'} failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
 def run_version():
     print(f"tempus {__version__}")
 
 def main():
     parser = argparse.ArgumentParser(
         prog="tempus",
-        description="Tempus DDB — The Tamper-Evident Flight Recorder for AI Agents"
+        description="Tempus DDB — The B2A security gate for autonomous agent actions"
     )
     parser.add_argument(
         "--version", action="store_true",
@@ -350,6 +435,9 @@ def main():
 
     # init
     subparsers.add_parser("init", help="Initialize keys and database")
+
+    keygen_p = subparsers.add_parser("keygen", help="Generate a workload Ed25519 keypair")
+    keygen_p.add_argument("--output", required=True, help="New key file path")
 
     # mcp
     mcp_parser = subparsers.add_parser("mcp", help="MCP server commands")
@@ -394,6 +482,28 @@ def main():
     # whoami
     subparsers.add_parser("whoami", help="Show the identity of the current keyfile")
 
+    # B2A execution-gate workflow
+    request_p = subparsers.add_parser(
+        "request-action",
+        help="Request a signed, single-use authorization before executing an action",
+    )
+    request_p.add_argument("--intent", required=True, help="tempus.action-intent.v1 JSON or file")
+    request_p.add_argument("--agent-keyfile", required=True, help="Requesting agent Ed25519 key file")
+    request_p.add_argument("--ttl-seconds", type=int, default=60, help="Permit lifetime (1-86400 seconds)")
+
+    outcome_p = subparsers.add_parser(
+        "commit-outcome",
+        help="Consume an allowed permit and append the signed executor outcome",
+    )
+    outcome_p.add_argument("--authorization-id", required=True)
+    outcome_p.add_argument("--outcome", required=True, help="tempus.action-outcome.v1 JSON or file")
+    outcome_p.add_argument("--executor-keyfile", required=True, help="Executor Ed25519 key file")
+
+    trace_p = subparsers.add_parser("trace", help="Read an action authorization and outcome")
+    trace_p.add_argument("--action-id", required=True)
+    verify_trace_p = subparsers.add_parser("verify-trace", help="Verify an action trace end to end")
+    verify_trace_p.add_argument("--action-id", required=True)
+
     args = parser.parse_args()
 
     if getattr(args, "version", False):
@@ -403,6 +513,8 @@ def main():
     try:
         if args.command == "init":
             run_init(args)
+        elif args.command == "keygen":
+            run_keygen(args)
         elif args.command == "mcp" and getattr(args, "mcp_cmd", None) == "start":
             main_sync()
         elif args.command == "verify":
@@ -423,6 +535,14 @@ def main():
             run_list_agents(args)
         elif args.command == "whoami":
             run_whoami(args)
+        elif args.command == "request-action":
+            run_request_action(args)
+        elif args.command == "commit-outcome":
+            run_commit_outcome(args)
+        elif args.command == "trace":
+            run_trace(args)
+        elif args.command == "verify-trace":
+            run_trace(args, verify=True)
         elif args.command is None:
             parser.print_help()
         else:

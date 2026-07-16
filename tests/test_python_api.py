@@ -9,8 +9,8 @@ Run with:
 """
 
 import json
-import os
 import sqlite3
+import time
 import pytest
 
 from tempus_ddb import TempusDDB, gen_keys
@@ -45,17 +45,12 @@ def test_record_with_parent_and_validate(tmp_path):
     # Genesis record
     payload1 = json.dumps({"step": 1, "decision": "start"})
     rules1 = json.dumps({})
-    res1 = db.record(payload1, rules1, genesis=True)
-
-    res1_data = json.loads(res1) if isinstance(res1, str) else res1
-    parent_hash = None
-    if isinstance(res1_data, dict):
-        parent_hash = res1_data.get("latest_hash") or res1_data.get("output", {}).get("latest_hash")
+    db.record(payload1, rules1, genesis=True)
 
     # Child record
     payload2 = json.dumps({"step": 2, "decision": "follow_up"})
     rules2 = json.dumps({})
-    res2 = db.record(payload2, rules2, genesis=False)
+    db.record(payload2, rules2, genesis=False)
 
     # Validation must succeed
     validation = db.validate()
@@ -198,3 +193,47 @@ def test_record_chaining_via_payload(tmp_path):
 
     val = db.validate()
     assert "valid" in str(val).lower() or "success" in str(val).lower()
+
+
+def test_b2a_python_api_round_trip(tmp_path):
+    gate_keyfile = tmp_path / "gate.keys.json"
+    agent_keyfile = tmp_path / "agent.keys.json"
+    executor_keyfile = tmp_path / "executor.keys.json"
+    db_path = tmp_path / "b2a.db"
+    for path in [gate_keyfile, agent_keyfile, executor_keyfile]:
+        gen_keys(str(path))
+    gate_id = json.loads(gate_keyfile.read_text())["public_key"]
+    agent_id = json.loads(agent_keyfile.read_text())["public_key"]
+    executor_id = json.loads(executor_keyfile.read_text())["public_key"]
+
+    db = TempusDDB(str(db_path), str(gate_keyfile))
+    db.register_agent(gate_id, "tempus-gate", json.dumps({"can_delegate": True}))
+    db.register_agent(agent_id, "agent", "{}")
+    db.register_agent(executor_id, "executor", "{}")
+
+    intent = json.dumps({
+        "schema_version": "tempus.action-intent.v1",
+        "tenant_id": "python-test",
+        "agent_id": agent_id,
+        "idempotency_key": "python-action-001",
+        "action_type": "write_file",
+        "resource": "workspace/report.json",
+        "requested_at": time.time_ns() // 1_000,
+        "input": {"digest": "abc123"},
+    })
+    authorization = json.loads(db.request_action(intent, str(agent_keyfile), 60))
+    assert authorization["authorization"]["decision"] == "ALLOWED"
+    authorization_id = authorization["authorization"]["authorization_id"]
+    action_id = authorization["authorization"]["action_id"]
+    outcome = json.dumps({
+        "schema_version": "tempus.action-outcome.v1",
+        "authorization_id": authorization_id,
+        "action_id": action_id,
+        "status": "SUCCEEDED",
+        "output": {"digest": "def456"},
+    })
+    receipt = json.loads(db.commit_outcome(authorization_id, outcome, str(executor_keyfile)))
+    assert receipt["receipt"]["status"] == "SUCCEEDED"
+    verification = json.loads(db.verify_trace(action_id))
+    assert verification["status"] == "VERIFIED"
+    assert verification["phase"] == "COMPLETED"

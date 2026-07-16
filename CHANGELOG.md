@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- First complete local B2A authorization flow: signed action intent, gate permit,
+  executor outcome, final receipt, trace reading, and end-to-end verification.
+- Stable versioned JSON contracts and closed machine statuses for autonomous consumers.
+- Signed, immutable agent registration events with a gate delegation root.
+- Deterministic action idempotency, expiring permits, and single-consumption outcomes.
+- Rust, Python, CLI, and MCP B2A surfaces plus replay/tamper/authorization tests.
+- Source-of-truth B2A implementation plan and production-oriented threat model.
+
+### Changed
+
+- MCP defaults to the autonomous execution-gate surface. Administrative, legacy, and
+  destructive tools now require explicit environment flags.
+- Product positioning now treats money as optional action metadata and humans as
+  read-only auditors rather than transaction approvers.
+
+### Security
+
+- Agent registrations can no longer be silently replaced.
+- The gate signing key is server-controlled for MCP authorization requests.
+- Unregistered agents are blocked before execution and conflicting permit reuse is
+  rejected.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

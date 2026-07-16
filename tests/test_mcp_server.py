@@ -1,94 +1,118 @@
-import pytest
 import json
-import os
-import tempfile
-from tempus_ddb.mcp_server import call_tool, list_tools, validate_path, app
+import time
+
+import pytest
+
+import tempus_ddb.mcp_server as mcp_module
+from tempus_ddb.mcp_server import call_tool, list_tools, validate_path
+
 
 @pytest.fixture
-def sandbox():
-    # Setup a temporary directory as the sandbox for tests
-    with tempfile.TemporaryDirectory() as tmpdir:
-        import tempus_ddb.mcp_server as mcp_module
-        old_sandbox = mcp_module.SANDBOX_DIR
-        mcp_module.SANDBOX_DIR = tmpdir
-        yield tmpdir
-        mcp_module.SANDBOX_DIR = old_sandbox
+def sandbox(tmp_path, monkeypatch):
+    monkeypatch.setattr(mcp_module, "SANDBOX_DIR", str(tmp_path))
+    monkeypatch.setattr(mcp_module, "TEMPUS_GATE_KEYFILE", "keys.json")
+    monkeypatch.setattr(mcp_module, "TEMPUS_ADMIN_TOOLS", False)
+    monkeypatch.setattr(mcp_module, "TEMPUS_LEGACY_TOOLS", False)
+    monkeypatch.setattr(mcp_module, "TEMPUS_DESTRUCTIVE_TOOLS", False)
+    return tmp_path
+
 
 @pytest.mark.asyncio
-async def test_list_tools():
+async def test_default_tool_surface_is_b2a_and_fail_closed(sandbox):
     tools = await list_tools()
-    names = [t.name for t in tools]
-    assert "tempus_init" in names
-    assert "tempus_gen_keys" in names
-    assert "tempus_record" in names
-    assert "tempus_validate" in names
-    assert "tempus_cleanup" in names
+    names = {tool.name for tool in tools}
+    assert {
+        "tempus_request_action",
+        "tempus_commit_outcome",
+        "tempus_get_trace",
+        "tempus_verify_trace",
+        "tempus_list_agents",
+    } <= names
+    assert "tempus_record" not in names
+    assert "tempus_register_agent" not in names
+    assert "tempus_cleanup" not in names
+
+    response = await call_tool("tempus_record", {})
+    payload = json.loads(response[0].text)
+    assert payload["status"] == "error"
+    assert payload["error"] == "TEMPUS_LEGACY_TOOL_DISABLED"
+
 
 def test_validate_path(sandbox):
-    # Should resolve correctly
     valid = validate_path("test.db")
-    assert valid.startswith(sandbox)
+    assert valid.startswith(str(sandbox))
     assert valid.endswith("test.db")
-    
-    # Path traversal should fail
     with pytest.raises(ValueError, match="Path escapes sandbox|disallowed '\\.\\.'"):
         validate_path("../outside.db")
 
+
 @pytest.mark.asyncio
-async def test_mcp_workflow(sandbox):
-    # 1. Gen Keys
-    result = await call_tool("tempus_gen_keys", {"output": "keys.json"})
-    assert "status" in result[0].text
-    resp = json.loads(result[0].text)
-    assert resp["status"] == "success"
-    assert "keys.json" in resp["key_file"]
+async def test_mcp_b2a_workflow(sandbox, monkeypatch):
+    monkeypatch.setattr(mcp_module, "TEMPUS_ADMIN_TOOLS", True)
 
-    # 2. Init
-    result = await call_tool("tempus_init", {"db": "test.db"})
-    resp = json.loads(result[0].text)
-    assert resp["status"] == "success"
+    for output in ["keys.json", "agent.keys.json", "executor.keys.json"]:
+        response = await call_tool("tempus_gen_keys", {"output": output})
+        assert json.loads(response[0].text)["status"] == "success"
+    response = await call_tool("tempus_init", {"db": "test.db"})
+    assert json.loads(response[0].text)["status"] == "success"
 
-    # 3. Record (Genesis)
-    result = await call_tool("tempus_record", {
-        "db": "test.db",
-        "payload": '{"action": "test"}',
-        "rules": '{"rule": "1"}',
-        "keyfile": "keys.json",
-        "genesis": True
+    agent_id = json.loads((sandbox / "agent.keys.json").read_text())["public_key"]
+    executor_id = json.loads((sandbox / "executor.keys.json").read_text())["public_key"]
+    for public_key, alias in [
+        (agent_id, "buyer-agent"),
+        (executor_id, "purchase-executor"),
+    ]:
+        response = await call_tool(
+            "tempus_register_agent",
+            {"db": "test.db", "public_key": public_key, "alias": alias},
+        )
+        assert json.loads(response[0].text)["status"] == "success"
+
+    intent = json.dumps({
+        "schema_version": "tempus.action-intent.v1",
+        "tenant_id": "mcp-test",
+        "agent_id": agent_id,
+        "idempotency_key": "mcp-action-001",
+        "action_type": "deploy",
+        "resource": "service/api",
+        "requested_at": time.time_ns() // 1_000,
+        "input": {"version": "1.2.3"},
     })
-    resp = json.loads(result[0].text)
-    assert resp["status"] == "success"
+    response = await call_tool(
+        "tempus_request_action",
+        {
+            "db": "test.db",
+            "intent": intent,
+            "agent_keyfile": "agent.keys.json",
+        },
+    )
+    authorization = json.loads(response[0].text)
+    assert authorization["authorization"]["decision"] == "ALLOWED"
+    authorization_id = authorization["authorization"]["authorization_id"]
+    action_id = authorization["authorization"]["action_id"]
 
-    # 4. Record (Child)
-    result = await call_tool("tempus_record", {
-        "db": "test.db",
-        "payload": '{"action": "test2"}',
-        "rules": '{"rule": "2"}',
-        "keyfile": "keys.json",
-        "genesis": False
+    outcome = json.dumps({
+        "schema_version": "tempus.action-outcome.v1",
+        "authorization_id": authorization_id,
+        "action_id": action_id,
+        "status": "SUCCEEDED",
+        "external_reference": "deploy-9182",
     })
-    resp = json.loads(result[0].text)
-    assert resp["status"] == "success"
+    response = await call_tool(
+        "tempus_commit_outcome",
+        {
+            "db": "test.db",
+            "authorization_id": authorization_id,
+            "outcome": outcome,
+            "executor_keyfile": "executor.keys.json",
+        },
+    )
+    assert json.loads(response[0].text)["receipt"]["status"] == "SUCCEEDED"
 
-    # 5. Validate
-    result = await call_tool("tempus_validate", {"db": "test.db"})
-    resp = json.loads(result[0].text)
-    assert resp["status"] == "success"
-
-    # 6. Invalid Payload
-    result = await call_tool("tempus_record", {
-        "db": "test.db",
-        "payload": 'invalid json',
-        "rules": '{"rule": "2"}',
-        "keyfile": "keys.json"
-    })
-    resp = json.loads(result[0].text)
-    assert resp["status"] == "error"
-    assert "TEMPUS_EXECUTION_ERROR" in resp["error"]
-    assert "valid JSON string" in resp["message"]
-
-    # 7. Cleanup
-    result = await call_tool("tempus_cleanup", {})
-    resp = json.loads(result[0].text)
-    assert resp["status"] == "success"
-    assert len(resp["removed"]) > 0
+    response = await call_tool(
+        "tempus_verify_trace",
+        {"db": "test.db", "action_id": action_id},
+    )
+    verification = json.loads(response[0].text)
+    assert verification["status"] == "VERIFIED"
+    assert verification["phase"] == "COMPLETED"

@@ -1,69 +1,75 @@
-"""
-End-to-end example simulating an autonomous agent using Tempus DDB.
-
-This shows a realistic flow an agent might follow for high-stakes decisions.
-"""
+"""End-to-end autonomous B2A authorization and execution example."""
 
 import json
-import time
-from tempus_ddb import TempusDDB, gen_keys
 import os
+import time
+
+from tempus_ddb import TempusDDB, gen_keys
+
 
 DB = "agent_flow.db"
-KEYS = "agent_flow_keys.json"
+GATE_KEYS = "agent_flow_gate.keys.json"
+AGENT_KEYS = "agent_flow_agent.keys.json"
+EXECUTOR_KEYS = "agent_flow_executor.keys.json"
 
-def agent_decide(db, action, details, rules, *, genesis=False):
-    """Simulate agent making a decision and recording it."""
-    payload = json.dumps({
-        "timestamp": int(time.time()),
-        "action": action,
-        "details": details
-    })
-    result = db.record(payload, json.dumps(rules), genesis=genesis)
-    data = json.loads(result) if isinstance(result, str) else result
-    return data.get("latest_hash") or (data.get("output") or {}).get("latest_hash")
+
+def public_key(path):
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)["public_key"]
+
 
 def main():
-    for f in [DB, KEYS]:
-        if os.path.exists(f):
-            os.remove(f)
+    for path in [DB, GATE_KEYS, AGENT_KEYS, EXECUTOR_KEYS]:
+        if os.path.exists(path):
+            os.remove(path)
 
-    gen_keys(KEYS)
-    db = TempusDDB(DB, KEYS)
+    for path in [GATE_KEYS, AGENT_KEYS, EXECUTOR_KEYS]:
+        gen_keys(path)
 
-    print("Agent starting mission...")
+    gate_id = public_key(GATE_KEYS)
+    agent_id = public_key(AGENT_KEYS)
+    executor_id = public_key(EXECUTOR_KEYS)
+    gate = TempusDDB(DB, GATE_KEYS)
+    gate.register_agent(gate_id, "tempus-gate", '{"can_delegate":true}')
+    gate.register_agent(agent_id, "mission-agent", "{}")
+    gate.register_agent(executor_id, "mission-executor", "{}")
 
-    # Decision 1
-    h1 = agent_decide(
-        db,
-        "scan_environment",
-        {"sensors": ["lidar", "camera"]},
-        {"risk": "low"},
-        genesis=True,
+    intent = json.dumps({
+        "schema_version": "tempus.action-intent.v1",
+        "tenant_id": "example-org",
+        "agent_id": agent_id,
+        "idempotency_key": "mission-001",
+        "action_type": "execute_mission",
+        "resource": "robot/fleet-7",
+        "requested_at": time.time_ns() // 1_000,
+        "input": {"target": "zone-4", "safety_distance": 30},
+        "money": None,
+    })
+    authorization = json.loads(gate.request_action(intent, AGENT_KEYS, 60))
+    permit = authorization["authorization"]
+    print(f"Authorization: {permit['decision']} ({permit['authorization_id']})")
+    if permit["decision"] != "ALLOWED":
+        print("Mission was blocked before execution.")
+        return
+
+    # A real executor verifies the permit, then uses credentials unavailable to
+    # the requesting agent. This sample effect is intentionally local.
+    observed_result = {"target_reached": True, "distance_maintained": 35}
+    outcome = json.dumps({
+        "schema_version": "tempus.action-outcome.v1",
+        "authorization_id": permit["authorization_id"],
+        "action_id": permit["action_id"],
+        "status": "SUCCEEDED",
+        "external_reference": "robot-run-001",
+        "output": observed_result,
+    })
+    receipt = json.loads(
+        gate.commit_outcome(permit["authorization_id"], outcome, EXECUTOR_KEYS)
     )
-    print(f"1. Environment scanned. Hash: {h1}")
+    verification = json.loads(gate.verify_trace(permit["action_id"]))
+    print(f"Execution receipt: {receipt['receipt']['receipt_id']}")
+    print(json.dumps(verification, indent=2))
 
-    # Decision 2 - chained
-    h2 = db.record(
-        json.dumps({"action": "approach_target", "distance": 50}),
-        json.dumps({"safety_distance": 30}),
-        genesis=False
-    )
-    h2 = json.loads(h2).get("latest_hash") if isinstance(h2, str) else h2
-    print(f"2. Approached target. Hash: {h2}")
-
-    # Decision 3
-    db.record(
-        json.dumps({"action": "execute_mission", "result": "success"}),
-        json.dumps({"confirmation_required": True}),
-        genesis=False
-    )
-    print("3. Mission executed.")
-
-    print("\nFinal verification:")
-    print(db.validate())
-
-    print("\n✅ Full auditable agent flow completed.")
 
 if __name__ == "__main__":
     main()

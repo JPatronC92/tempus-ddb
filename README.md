@@ -1,251 +1,253 @@
-<p align="center">
-  <img src="assets/logo.png" alt="Tempus DDB Logo" width="220">
-</p>
+<div align="center">
+  <img src="assets/logo.png" alt="Tempus DDB" width="180" />
 
-<h1 align="center">Tempus DDB</h1>
+# Tempus DDB
 
-<p align="center">
-  <strong>The Tamper-Evident Flight Recorder for AI Agents</strong><br>
-  <sub>Local-first • Cryptographically verifiable • Built for MCP</sub>
-</p>
+**The B2A security gate for autonomous agent actions**
 
-<p align="center">
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#why-tempus-ddb">Why Tempus DDB</a> •
-  <a href="#usage-examples">Examples</a> •
-  <a href="#cli-reference">CLI</a> •
-  <a href="#mcp-tools">MCP Tools</a> •
-  <a href="#roadmap">Roadmap</a>
-</p>
+Local-first · Fail-closed contracts · Ed25519 receipts · MCP-native
+</div>
 
----
+Tempus sits between an agent's intent and an external effect. The agent signs what it
+wants to do, Tempus issues a short-lived permit, an executor performs the effect, and
+the executor plus Tempus sign the outcome. A human is not part of the transaction loop;
+humans only inspect the resulting history.
 
-## What is Tempus DDB?
+> **Product invariant:** no Tempus permit, no effect; every effect produces a verifiable
+> receipt.
 
-**Tempus DDB** is a **free, local-first, offline-by-default, cryptographically verifiable decision ledger** for autonomous AI agents and agentic systems.
+The current `main` branch implements the first complete local vertical slice of that
+contract. It does **not** yet include the credential-holding executor proxy, remote KMS,
+external checkpoints, or a web audit console. See [B2A_IMPLEMENTATION_PLAN.md](B2A_IMPLEMENTATION_PLAN.md)
+and [THREAT_MODEL.md](THREAT_MODEL.md) for the exact boundary.
 
-It functions as a **tamper-evident Flight Recorder**: agents can record critical decisions with Ed25519 digital signatures and a hash-chained causal structure. This produces a tamper-evident audit trail that can be independently verified at any time.
+## What is implemented
 
-### Official One-Liner
-> Give your AI agents a memory they cannot rewrite.
+- Stable machine contracts with explicit `schema_version` values.
+- Separate Ed25519 identities for the Tempus gate, requesting agent, and executor.
+- Immutable, gate-signed agent registration receipts. Registrations cannot be silently
+  overwritten.
+- `ALLOWED` or `BLOCKED` authorization before execution.
+- Short-lived permits, deterministic action IDs, and idempotency conflict detection.
+- Single-consumption execution receipts; an identical retry is idempotent and a
+  conflicting second outcome is rejected.
+- End-to-end verification of intent, gate authorization, executor outcome, and receipt
+  linkage.
+- Money is optional metadata in the same universal action envelope; financial and
+  non-financial actions use the same protocol.
+- An autonomous MCP surface that hides administrative, legacy, and destructive tools by
+  default.
 
-### Core Value Proposition
-- **Verifiability first**: Every decision is signed and linked — alterations are immediately detectable.
-- **Built for agents**: Native support for MCP (Model Context Protocol), making it trivial to integrate with Claude, Cursor, LangGraph, CrewAI, etc.
-- **Zero friction**: Completely free, offline by default, no accounts, no cloud required, and no license gate.
-- **Production-grade simplicity**: Small Rust core + clean Python bindings. One binary. One database.
+## B2A flow
 
-### Positioning
-Tempus DDB is the minimal, trustworthy foundation for any system where autonomous agents must be accountable for high-stakes actions.
-
----
-
-## Why Use Tempus DDB?
-
-AI agents are increasingly making high-impact decisions. Without a reliable audit trail, it's impossible to know:
-
-- What the agent decided
-- When it decided
-- Based on what rules or data
-- Whether the record was later altered
-
-**Tempus DDB solves this** by giving agents a simple, reliable way to sign and chain their decisions.
-
-### Ideal Use Cases
-- Financial or budget-related actions
-- Code generation or modification with external effects
-- Configuration changes and permission grants
-- Strategic or business-critical decisions
-- Multi-agent coordination and accountability
-- Compliance, debugging, or post-incident analysis
-
----
-
-## Quick Start
-
-### 1. Install
-
-```bash
-git clone https://github.com/JPatronC92/tempus-ddb.git
-cd tempus-ddb
-pip install .
+```text
+agent signs intent
+        │
+        ▼
+Tempus request_action ── BLOCKED ──► signed denial trace
+        │ ALLOWED
+        ▼
+single-use, expiring permit
+        │
+        ▼
+executor performs effect and signs outcome
+        │
+        ▼
+Tempus commit_outcome ──► final signed execution receipt
+        │
+        ▼
+human or machine calls verify_trace
 ```
 
-### 2. Initialize
+Tempus becomes an unavoidable toll only when the executor or downstream API holds the
+real credentials and refuses requests without a valid Tempus permit. The current repo
+provides the permit protocol; mediated executor adapters are the next production phase.
+
+## Install
+
+```bash
+pip install tempus-ddb
+```
+
+Development checkout:
+
+```bash
+python -m pip install -e .
+```
+
+## Bootstrap identities
+
+`tempus init` creates the local gate key and database, then records the gate as the
+signed delegation root. This is deployment-time bootstrap, not a human approval step
+for each action.
 
 ```bash
 tempus init
+tempus keygen --output agent.keys.json
+tempus keygen --output executor.keys.json
+
+tempus register-agent --alias purchasing-agent --agent-keyfile agent.keys.json
+tempus register-agent --alias purchasing-executor --agent-keyfile executor.keys.json
 ```
 
-This creates:
-- `keys.json` — Your Ed25519 keypair
-- `tempus.db` — The decision ledger
+The gate key is the global `--keyfile` for the Python CLI and defaults to `keys.json`.
+Production deployments should replace plaintext key files with a KMS/HSM-backed signer.
 
-### 3. Use with Claude / MCP Clients
+## Python quickstart
 
-Add to your MCP configuration:
+```python
+import json
+import time
+from tempus_ddb import TempusDDB, gen_keys
+
+gen_keys("gate.keys.json")
+gen_keys("agent.keys.json")
+gen_keys("executor.keys.json")
+
+gate = TempusDDB("tempus.db", "gate.keys.json")
+
+with open("gate.keys.json", encoding="utf-8") as handle:
+    gate_id = json.load(handle)["public_key"]
+with open("agent.keys.json", encoding="utf-8") as handle:
+    agent_id = json.load(handle)["public_key"]
+with open("executor.keys.json", encoding="utf-8") as handle:
+    executor_id = json.load(handle)["public_key"]
+
+gate.register_agent(gate_id, "tempus-gate", '{"can_delegate":true}')
+gate.register_agent(agent_id, "purchasing-agent", "{}")
+gate.register_agent(executor_id, "purchasing-executor", "{}")
+
+intent = json.dumps({
+    "schema_version": "tempus.action-intent.v1",
+    "tenant_id": "acme",
+    "agent_id": agent_id,
+    "idempotency_key": "purchase-2026-07-16-001",
+    "action_type": "purchase",
+    "resource": "vendor-api/compute-credits",
+    "requested_at": time.time_ns() // 1_000,
+    "input": {"sku": "compute-credits"},
+    "money": {"amount": "25.00", "asset": "USD", "beneficiary": "vendor-42"},
+})
+
+authorization = json.loads(gate.request_action(intent, "agent.keys.json", 60))
+permit = authorization["authorization"]
+assert permit["decision"] == "ALLOWED"
+
+# The executor performs the external effect only after checking the permit.
+outcome = json.dumps({
+    "schema_version": "tempus.action-outcome.v1",
+    "authorization_id": permit["authorization_id"],
+    "action_id": permit["action_id"],
+    "status": "SUCCEEDED",
+    "external_reference": "vendor-tx-9182",
+    "output": {"credits_added": 1000},
+})
+
+receipt = gate.commit_outcome(
+    permit["authorization_id"],
+    outcome,
+    "executor.keys.json",
+)
+verification = json.loads(gate.verify_trace(permit["action_id"]))
+assert verification["status"] == "VERIFIED"
+assert verification["phase"] == "COMPLETED"
+```
+
+For remote transports, use `request_action_signed(...)` so the agent signs locally and
+never sends its private key or keyfile to Tempus.
+
+## Stable contracts
+
+| Contract | Schema |
+|---|---|
+| Agent intent | `tempus.action-intent.v1` |
+| Authorization response | `tempus.authorization-result.v1` |
+| Signed permit | `tempus.authorization-receipt.v1` |
+| Executor outcome | `tempus.action-outcome.v1` |
+| Execution response | `tempus.execution-result.v1` |
+| Signed execution receipt | `tempus.execution-receipt.v1` |
+| Complete trace | `tempus.action-trace.v1` |
+| Verification result | `tempus.trace-verification.v1` |
+
+Authorization decisions are `ALLOWED` or `BLOCKED`. Execution outcomes are `SUCCEEDED`
+or `FAILED`. Trace verification is `VERIFIED` or `INVALID`.
+
+## MCP autonomous mode
+
+The default MCP surface exposes only machine-to-machine execution and read-only audit
+operations:
+
+| Tool | Purpose |
+|---|---|
+| `tempus_request_action` | Obtain a signed, expiring permit |
+| `tempus_commit_outcome` | Consume a permit with an executor-signed result |
+| `tempus_get_trace` | Read authorization and execution evidence |
+| `tempus_verify_trace` | Verify the complete action trace |
+| `tempus_list_agents` | Read signed agent identities |
+
+Configuration:
 
 ```json
 {
   "mcpServers": {
-    "tempus-ddb": {
+    "tempus": {
       "command": "tempus",
-      "args": ["mcp", "start"]
+      "args": ["mcp", "start"],
+      "env": {
+        "TEMPUS_MODE": "autonomous",
+        "TEMPUS_GATE_KEYFILE": "keys.json"
+      }
     }
   }
 }
 ```
 
-### 4. Record a Decision (via agent or CLI)
+Provisioning should run separately from the agent-facing MCP process. The following
+flags are deliberately off by default:
 
-Agents can call `tempus_record_decision` (or the alias `tempus_record`).
+| Flag | Unlocks |
+|---|---|
+| `TEMPUS_ADMIN_TOOLS=1` | init, key generation, signed agent registration, whoami |
+| `TEMPUS_LEGACY_TOOLS=1` | old voluntary `record`, list, export, count, validate tools |
+| `TEMPUS_DESTRUCTIVE_TOOLS=1` | demo-only cleanup |
 
-Example payload:
-```json
-{
-  "action": "approve_budget",
-  "amount": 12500,
-  "reason": "Q3 marketing campaign",
-  "risks": ["market volatility"]
-}
-```
+## Human audit
 
-Rules (the logic the agent applied):
-```json
-{
-  "max_amount": 15000,
-  "requires_approval": true
-}
-```
-
----
-
-## How the Causal Chain Works
-
-Every record contains:
-- A canonical hash of (parent_hash + timestamp + payload + rules)
-- An Ed25519 signature over that hash
-- The actor's public key (derived from the keyfile)
-
-```
-Genesis (no parent)
-   ↓
-Decision 1  ← signed hash includes genesis hash
-   ↓
-Decision 2  ← signed hash includes Decision 1 hash
-   ↓
-...
-```
-
-Running `tempus_validate` replays the entire chain and checks every signature and hash link.
-
----
-
-## CLI Reference
-
-### Official Python CLI (`tempus`)
-The primary interface for developers and users. Installed via `pip install tempus_ddb`.
+Humans are readers, not approvers:
 
 ```bash
-tempus init          # Bootstrap keys + database
-tempus mcp start     # Launch MCP server for agents (stdio)
-tempus verify        # Full cryptographic validation
-tempus status        # Show keys, DB and chain status
-tempus record        # Record a decision directly from CLI
-tempus --version     # Show version
+tempus trace --action-id <action-id>
+tempus verify-trace --action-id <action-id>
+tempus list-agents
 ```
 
-Example of direct record:
+The future audit console will be read-only and derive its views from these contracts.
+
+## Legacy ledger
+
+The original `record`, `validate`, `list`, `count`, and `export` interfaces remain for
+compatibility and migration. They are a voluntary flight recorder and do not enforce
+the B2A toll. New autonomous integrations should use the action authorization flow.
+
+## Security boundary
+
+This implementation detects receipt and trace alteration, rejects unregistered actors,
+prevents conflicting idempotent requests, and prevents two outcomes from consuming one
+permit. It does not yet prevent deletion of the entire local database or bypass by an
+agent that still possesses downstream credentials. Read [THREAT_MODEL.md](THREAT_MODEL.md)
+before using Tempus for high-impact production actions.
+
+## Development
 
 ```bash
-tempus record \
-  --payload '{"action": "update_config", "key": "timeout", "value": 30}' \
-  --rules '{"max_value": 300}' \
-  --genesis
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test --all-targets
+ruff check .
+pytest -p no:cacheprovider
+python -m maturin build
 ```
 
-### Internal Core CLI (`tempus-ddb`)
-If you build the Rust core directly (`cargo build`), you will get an internal binary `tempus-ddb`. This is mostly a thin wrapper for development, debugging, and the `tamper_demo_rust_cli.py` stress test. For production usage, always use the `tempus` Python CLI or the TempusDDB class directly.
+## License
 
----
-
-## Tamper Detection Demo
-
-You can run the interactive tamper detection test to see how the ledger catches malicious manipulation:
-
-```bash
-python tamper_demo_rust_cli.py
-```
-This script creates a valid causal chain of 50 records, directly modifies a payload via SQLite without updating the cryptographic hash or signature, and then proves that Tempus DDB immediately catches the breach.
-
----
-
-## MCP Tools Reference
-
-| Tool                    | Description                                           | Key Parameters                              |
-|-------------------------|-------------------------------------------------------|---------------------------------------------|
-| `tempus_init`           | Initialize SQLite ledger                              | `db`                                        |
-| `tempus_gen_keys`       | Generate Ed25519 signing keys                         | `output`                                    |
-| `tempus_record`         | Record decision (alias)                               | `db`, `payload`, `rules`, `keyfile`         |
-| `tempus_record_decision`| Main tool to log a decision                           | `db`, `payload`, `rules`, `keyfile`, `genesis` |
-| `tempus_validate`       | Verify the full tamper-evident chain                  | `db`                                        |
-| `tempus_cleanup`        | Wipe local files (useful for demos)                   | —                                           |
-
----
-
-## Security Model
-
-- Only the holder of the private key in `keyfile` can create valid signed records.
-- **⚠️ WARNING:** Your `keyfile` (e.g., `keys.json`) contains the raw Ed25519 private key. **Do not commit this file to version control**. Exposing it completely compromises the integrity of the ledger, allowing an attacker to forge records.
-- Hash chaining + signatures → any modification is immediately detectable.
-- Fully local by default — nothing leaves the machine.
-- The core has no license gate. It is fully open.
-
----
-
-## Commercial Opportunities & Business Models
-
-While Tempus DDB core is free, open-source, and local-first, the architecture naturally supports highly profitable enterprise scaling models:
-
-### 1. Tempus Cloud (Multi-Agent Sync & Backup)
-Local ledgers (`tempus.db`) are great for single agents, but enterprise deployments with hundreds of autonomous agents need consolidation. Tempus Cloud is a premium SaaS that synchronizes, backs up, and aggregates local ledgers into a secure, centralized vault for real-time observability and cross-agent consensus.
-
-### 2. Cryptographic Anchoring (The "Gas" Model)
-To prevent catastrophic data loss or malicious ledger deletion (e.g., if a server is wiped), enterprises need irrefutable proof of state. Tempus offers a premium API service that periodically anchors the latest ledger hash to public blockchains (Ethereum, Base, Solana). We charge a micro-transaction fee for every public timestamp, acting as a decentralized notary.
-
-### 3. Enterprise Compliance Dashboard (SIEM Integration)
-Auditors and Compliance Officers need human-readable interfaces, not JSON files in a terminal. The Enterprise License includes a rich web dashboard that connects to `tempus.db`, sets up real-time alerts for high-stakes financial decisions, generates PDF audit reports, and integrates seamlessly with corporate security tools like Splunk or Datadog.
-
-### 4. Dispute Resolution as a Service
-As B2A (Business-to-Agent) transactions scale, agents will inevitably dispute outcomes (e.g., "My agent paid, but yours didn't deliver the code"). By standardizing on Tempus DDB, we can offer automated, cryptographic arbitration services that read both agents' ledgers, verify signatures, and issue neutral, legally-binding verdicts for an arbitration fee.
-
-### 5. Agentic Payment Gateway ("Stripe for AI")
-Tempus DDB is already the layer where agents use cryptographic keys (Ed25519) to sign critical decisions. A premium module will bridge these signatures directly to smart contracts (USDC) or fiat banking APIs. This allows Tempus to process the actual financial movement triggered by the decision and capture a percentage fee per transaction.
-
-## WASM Status
-
-WASM support is experimental and currently uses in-memory stub storage. Do not rely on it for persistent ledgers or audit workflows yet.
-
-## Releasing
-
-1. Update version in `pyproject.toml` and `Cargo.toml`
-2. Update `CHANGELOG.md`
-3. Commit and tag: `git tag vX.Y.Z`
-4. Push tag: `git push origin vX.Y.Z`
-5. Create GitHub Release (the release.yml will build and attach wheels automatically)
-6. (Optional) Publish to PyPI: use the release workflow or `maturin publish`
-
----
-
-## Contributing
-
-We welcome contributions that keep the core simple and focused.
-
-1. Fork the repo
-2. Make changes on a feature branch
-3. Ensure tests pass (`python -m pytest` or the existing integration tests)
-4. Open a PR
-
----
-
-**Tempus DDB** — Give your agents a memory they can't rewrite.
+MIT. See [LICENSE](LICENSE).

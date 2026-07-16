@@ -51,3 +51,4 @@ module-name = "tempus_ddb._tempus_ddb"
 
 [tool.pytest.ini_options]
 pythonpath = ["python"]
+testpaths = ["tests"]

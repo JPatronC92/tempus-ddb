@@ -19,10 +19,10 @@ def test_tamper_delete_middle_record(tmp_path):
     try:
         # Get the second record
         cur = conn.cursor()
-        cur.execute("SELECT hash FROM decisions ORDER BY timestamp ASC LIMIT 1 OFFSET 1")
+        cur.execute("SELECT id FROM decisions ORDER BY timestamp ASC LIMIT 1 OFFSET 1")
         mid_hash = cur.fetchone()[0]
         # Delete it
-        conn.execute("DELETE FROM decisions WHERE hash = ?", (mid_hash,))
+        conn.execute("DELETE FROM decisions WHERE id = ?", (mid_hash,))
         conn.commit()
     finally:
         conn.close()

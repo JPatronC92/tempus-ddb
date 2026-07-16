@@ -2,6 +2,8 @@
 /target
 /build
 /dist
+/.tmp
+/scratch
 *.egg-info/
 *.pyd
 *.so
@@ -20,6 +22,7 @@ tempus.db
 
 # Python
 __pycache__/
+.pytest_cache/
 .venv*
 .env
 *.pyc

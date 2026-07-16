@@ -1,3 +1,5 @@
+#![allow(clippy::useless_conversion)] // PyO3 macro expansion on Rust 1.96.
+
 #[cfg(not(target_arch = "wasm32"))]
 use pyo3::exceptions::{PyPermissionError, PyRuntimeError};
 #[cfg(not(target_arch = "wasm32"))]
@@ -5,6 +7,9 @@ use pyo3::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+
+#[cfg(not(target_arch = "wasm32"))]
+mod b2a;
 
 // --- 1. PATRÓN STORAGE LAYER (TRAIT) ---
 pub trait StorageLayer {
@@ -137,23 +142,7 @@ impl SqliteStorage {
         )
         .map_err(|e| format!("Failed to create causal depth index: {}", e))?;
 
-        // --- Multi-Signer: Agents registry ---
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS agents (
-                public_key TEXT PRIMARY KEY,
-                alias TEXT,
-                registered_at INTEGER NOT NULL,
-                metadata TEXT DEFAULT '{}'
-            );",
-            [],
-        )
-        .map_err(|e| format!("Failed to create agents table: {}", e))?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_agents_alias ON agents (alias);",
-            [],
-        )
-        .map_err(|e| format!("Failed to create agents alias index: {}", e))?;
+        b2a::initialize_schema(&conn)?;
 
         Ok(Self { conn, keyfile })
     }
@@ -200,8 +189,8 @@ impl SqliteStorage {
 
         let payload_val: serde_json::Value =
             serde_json::from_str(payload).map_err(|e| format!("Invalid payload JSON: {}", e))?;
-        let rules_val: serde_json::Value =
-            serde_json::from_str(rules_evaluated).map_err(|e| format!("Invalid rules JSON: {}", e))?;
+        let rules_val: serde_json::Value = serde_json::from_str(rules_evaluated)
+            .map_err(|e| format!("Invalid rules JSON: {}", e))?;
 
         let canonical = CanonicalPayload {
             parent_id,
@@ -307,7 +296,10 @@ impl SqliteStorage {
         if !decisions.is_empty() && genesis_count == 0 {
             errors.push("No genesis decision found in the ledger.".to_string());
         } else if genesis_count > 1 {
-            errors.push(format!("Multiple genesis decisions found ({}). Only one is allowed.", genesis_count));
+            errors.push(format!(
+                "Multiple genesis decisions found ({}). Only one is allowed.",
+                genesis_count
+            ));
         }
 
         for d in &decisions {
@@ -430,12 +422,16 @@ impl SqliteStorage {
             unique_actors.insert(d.actor_id.clone());
         }
         for actor in &unique_actors {
-            let registered: bool = self.conn.prepare(
-                "SELECT 1 FROM agents WHERE public_key = ?1 LIMIT 1"
-            ).and_then(|mut s| s.exists([actor]))
-            .unwrap_or(false);
+            let registered: bool = self
+                .conn
+                .prepare("SELECT 1 FROM agents WHERE public_key = ?1 LIMIT 1")
+                .and_then(|mut s| s.exists([actor]))
+                .unwrap_or(false);
             if !registered {
-                warnings.push(format!("Actor '{}' is not registered in the agents table.", actor));
+                warnings.push(format!(
+                    "Actor '{}' is not registered in the agents table.",
+                    actor
+                ));
             }
         }
 
@@ -463,91 +459,73 @@ impl SqliteStorage {
         }
     }
 
-    // --- Multi-Signer: Agent management methods ---
-
-    /// Register an agent in the ledger's agent registry.
-    pub fn register_agent(&self, public_key: &str, alias: &str, metadata: &str) -> Result<String, String> {
-        // Validate metadata is valid JSON
-        serde_json::from_str::<serde_json::Value>(metadata)
-            .map_err(|e| format!("Metadata is not valid JSON: {}", e))?;
-
-        // Validate public_key is valid hex (32 bytes = 64 hex chars)
-        let pk_bytes = hex::decode(public_key)
-            .map_err(|e| format!("Invalid public key hex: {}", e))?;
-        if pk_bytes.len() != 32 {
-            return Err(format!("Public key must be 32 bytes (64 hex chars), got {} bytes", pk_bytes.len()));
-        }
-
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .map_err(|e| format!("System time error: {}", e))?
-            .as_micros() as u64;
-
-        self.conn.execute(
-            "INSERT OR REPLACE INTO agents (public_key, alias, registered_at, metadata) VALUES (?1, ?2, ?3, ?4)",
-            (public_key, alias, timestamp, metadata),
-        ).map_err(|e| format!("Failed to register agent: {}", e))?;
-
-        Ok(serde_json::to_string(&serde_json::json!({
-            "status": "success",
-            "message": format!("Agent '{}' registered successfully.", alias),
-            "public_key": public_key,
-            "alias": alias
-        })).unwrap())
+    /// Register an agent through a signed, immutable delegation event.
+    ///
+    /// The first registration bootstraps the gate key itself. Every later
+    /// registration must be signed by an active agent with delegation rights.
+    pub fn register_agent(
+        &self,
+        public_key: &str,
+        alias: &str,
+        metadata: &str,
+    ) -> Result<String, String> {
+        b2a::register_agent(self, public_key, alias, metadata)
     }
 
-    /// List all registered agents.
+    /// Verify that an agent has a valid signed registration and is active.
+    pub fn verify_agent(&self, public_key: &str) -> Result<bool, String> {
+        b2a::verify_agent(self, public_key)
+    }
+
+    /// List registered agents and the validity of their registration receipts.
     pub fn list_agents(&self) -> Result<String, String> {
-        let mut stmt = self.conn.prepare(
-            "SELECT public_key, alias, registered_at, metadata FROM agents ORDER BY registered_at ASC"
-        ).map_err(|e| format!("Failed to prepare agents query: {}", e))?;
-
-        let rows = stmt.query_map([], |row| {
-            let pk: String = row.get(0)?;
-            let alias: String = row.get(1)?;
-            let registered_at: u64 = row.get(2)?;
-            let metadata: String = row.get(3)?;
-            Ok(serde_json::json!({
-                "public_key": pk,
-                "alias": alias,
-                "registered_at": registered_at,
-                "metadata": serde_json::from_str::<serde_json::Value>(&metadata).unwrap_or(serde_json::json!({}))
-            }))
-        }).map_err(|e| format!("Failed to query agents: {}", e))?;
-
-        let mut agents = Vec::new();
-        for r in rows {
-            match r {
-                Ok(a) => agents.push(a),
-                Err(e) => return Err(format!("Error reading agent: {}", e)),
-            }
-        }
-
-        serde_json::to_string(&agents)
-            .map_err(|e| format!("Failed to serialize agents: {}", e))
+        b2a::list_agents(self)
     }
 
-    /// Get a single agent by public key.
+    /// Get a single registered agent.
     pub fn get_agent(&self, public_key: &str) -> Result<String, String> {
-        let mut stmt = self.conn.prepare(
-            "SELECT public_key, alias, registered_at, metadata FROM agents WHERE public_key = ?1"
-        ).map_err(|e| format!("Failed to prepare agent query: {}", e))?;
+        b2a::get_agent(self, public_key)
+    }
 
-        let result = stmt.query_row([public_key], |row| {
-            let pk: String = row.get(0)?;
-            let alias: String = row.get(1)?;
-            let registered_at: u64 = row.get(2)?;
-            let metadata: String = row.get(3)?;
-            Ok(serde_json::json!({
-                "public_key": pk,
-                "alias": alias,
-                "registered_at": registered_at,
-                "metadata": serde_json::from_str::<serde_json::Value>(&metadata).unwrap_or(serde_json::json!({}))
-            }))
-        }).map_err(|e| format!("Agent not found: {}", e))?;
+    /// Ask the Tempus gate for a single-use authorization receipt.
+    pub fn request_action(
+        &self,
+        intent: &str,
+        agent_keyfile: &str,
+        ttl_seconds: u64,
+    ) -> Result<String, String> {
+        b2a::request_action(self, intent, agent_keyfile, ttl_seconds)
+    }
 
-        serde_json::to_string(&result)
-            .map_err(|e| format!("Failed to serialize agent: {}", e))
+    /// Lower-level transport-neutral authorization API for signed requests.
+    pub fn request_action_signed(
+        &self,
+        intent: &str,
+        agent_id: &str,
+        agent_signature: &str,
+        ttl_seconds: u64,
+    ) -> Result<String, String> {
+        b2a::request_action_signed(self, intent, agent_id, agent_signature, ttl_seconds)
+    }
+
+    /// Consume an allowed permit exactly once and append the executor outcome.
+    pub fn commit_outcome(
+        &self,
+        authorization_id: &str,
+        outcome: &str,
+        executor_keyfile: &str,
+    ) -> Result<String, String> {
+        b2a::commit_outcome(self, authorization_id, outcome, executor_keyfile)
+    }
+
+    /// Return the authorization and optional execution receipt for an action.
+    pub fn get_trace(&self, action_id: &str) -> Result<String, String> {
+        b2a::get_trace(self, action_id)
+    }
+
+    /// Cryptographically verify an action trace end to end.
+    pub fn verify_trace(&self, action_id: &str) -> Result<String, String> {
+        b2a::verify_trace(self, action_id)
     }
 }
 
@@ -729,7 +707,9 @@ impl StorageLayer for SqliteStorage {
     }
 
     fn count_decisions(&self) -> Result<u64, String> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM decisions")
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COUNT(*) FROM decisions")
             .map_err(|e| format!("Failed to prepare count statement: {}", e))?;
         let count: u64 = stmt
             .query_row([], |row| row.get(0))
@@ -739,7 +719,7 @@ impl StorageLayer for SqliteStorage {
 }
 // --- 3. BINDINGS PARA PYTHON (PYO3) ---
 #[cfg(not(target_arch = "wasm32"))]
-#[pyclass]
+#[pyclass(unsendable)]
 pub struct TempusDDB {
     storage: SqliteStorage,
     #[allow(dead_code)]
@@ -747,12 +727,13 @@ pub struct TempusDDB {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::useless_conversion)]
 #[pymethods]
 impl TempusDDB {
     #[new]
     fn new(db_path: String, keyfile: String) -> PyResult<Self> {
-        let storage = SqliteStorage::new(db_path, keyfile.clone())
-            .map_err(|e| PyPermissionError::new_err(e))?;
+        let storage =
+            SqliteStorage::new(db_path, keyfile.clone()).map_err(PyPermissionError::new_err)?;
 
         if std::path::Path::new(&keyfile).exists() {
             storage
@@ -768,7 +749,7 @@ impl TempusDDB {
     fn record(&mut self, payload: &str, rules: &str, genesis: bool) -> PyResult<String> {
         self.storage
             .insert_decision(payload, rules, genesis)
-            .map_err(|e| PyPermissionError::new_err(e))?;
+            .map_err(PyPermissionError::new_err)?;
 
         let result_json = format!(
             r#"{{"status": "success", "action": "recorded", "latest_hash": "{}"}}"#,
@@ -781,28 +762,28 @@ impl TempusDDB {
     fn validate(&self) -> PyResult<String> {
         self.storage
             .validate_ledger()
-            .map_err(|e| PyRuntimeError::new_err(e))
+            .map_err(PyRuntimeError::new_err)
     }
 
     #[pyo3(signature = ())]
     fn export(&self) -> PyResult<String> {
         self.storage
             .export_ledger()
-            .map_err(|e| PyRuntimeError::new_err(e))
+            .map_err(PyRuntimeError::new_err)
     }
 
     #[pyo3(signature = (limit=10, offset=0))]
     fn list(&self, limit: u32, offset: u32) -> PyResult<String> {
         self.storage
             .list_decisions(limit, offset)
-            .map_err(|e| PyRuntimeError::new_err(e))
+            .map_err(PyRuntimeError::new_err)
     }
 
     #[pyo3(signature = ())]
     fn count(&self) -> PyResult<u64> {
         self.storage
             .count_decisions()
-            .map_err(|e| PyRuntimeError::new_err(e))
+            .map_err(PyRuntimeError::new_err)
     }
 
     // --- Multi-Signer: Agent management ---
@@ -811,40 +792,95 @@ impl TempusDDB {
     fn register_agent(&self, public_key: &str, alias: &str, metadata: String) -> PyResult<String> {
         self.storage
             .register_agent(public_key, alias, &metadata)
-            .map_err(|e| PyRuntimeError::new_err(e))
+            .map_err(PyRuntimeError::new_err)
     }
 
     #[pyo3(signature = ())]
     fn list_agents(&self) -> PyResult<String> {
-        self.storage
-            .list_agents()
-            .map_err(|e| PyRuntimeError::new_err(e))
+        self.storage.list_agents().map_err(PyRuntimeError::new_err)
     }
 
     #[pyo3(signature = (public_key,))]
     fn get_agent(&self, public_key: &str) -> PyResult<String> {
         self.storage
             .get_agent(public_key)
-            .map_err(|e| PyRuntimeError::new_err(e))
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (public_key,))]
+    fn verify_agent(&self, public_key: &str) -> PyResult<bool> {
+        self.storage
+            .verify_agent(public_key)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (intent, agent_keyfile, ttl_seconds=60))]
+    fn request_action(
+        &self,
+        intent: &str,
+        agent_keyfile: &str,
+        ttl_seconds: u64,
+    ) -> PyResult<String> {
+        self.storage
+            .request_action(intent, agent_keyfile, ttl_seconds)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (intent, agent_id, agent_signature, ttl_seconds=60))]
+    fn request_action_signed(
+        &self,
+        intent: &str,
+        agent_id: &str,
+        agent_signature: &str,
+        ttl_seconds: u64,
+    ) -> PyResult<String> {
+        self.storage
+            .request_action_signed(intent, agent_id, agent_signature, ttl_seconds)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (authorization_id, outcome, executor_keyfile))]
+    fn commit_outcome(
+        &self,
+        authorization_id: &str,
+        outcome: &str,
+        executor_keyfile: &str,
+    ) -> PyResult<String> {
+        self.storage
+            .commit_outcome(authorization_id, outcome, executor_keyfile)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (action_id,))]
+    fn get_trace(&self, action_id: &str) -> PyResult<String> {
+        self.storage
+            .get_trace(action_id)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (action_id,))]
+    fn verify_trace(&self, action_id: &str) -> PyResult<String> {
+        self.storage
+            .verify_trace(action_id)
+            .map_err(PyRuntimeError::new_err)
     }
 
     /// Return the public key of the current keyfile ("who am I?").
     #[pyo3(signature = ())]
     fn whoami(&self) -> PyResult<String> {
-        let signing_key = self.storage
+        let signing_key = self
+            .storage
             .load_signing_key()
-            .map_err(|e| PyRuntimeError::new_err(e))?;
+            .map_err(PyRuntimeError::new_err)?;
         let verifying_key = signing_key.verifying_key();
         let public_key = hex::encode(verifying_key.to_bytes());
 
         // Try to find the agent alias
         let alias = match self.storage.get_agent(&public_key) {
-            Ok(json_str) => {
-                serde_json::from_str::<serde_json::Value>(&json_str)
-                    .ok()
-                    .and_then(|v| v["alias"].as_str().map(|s| s.to_string()))
-                    .unwrap_or_default()
-            }
+            Ok(json_str) => serde_json::from_str::<serde_json::Value>(&json_str)
+                .ok()
+                .and_then(|v| v["alias"].as_str().map(|s| s.to_string()))
+                .unwrap_or_default(),
             Err(_) => String::new(),
         };
 
@@ -852,7 +888,8 @@ impl TempusDDB {
             "public_key": public_key,
             "alias": alias,
             "keyfile": self.keyfile
-        })).unwrap())
+        }))
+        .unwrap())
     }
 }
 
@@ -878,11 +915,11 @@ pub fn generate_keypair(output: &str) -> Result<String, String> {
         private_key: hex::encode(signing_key.to_bytes()),
     };
 
-    let json_str = serde_json::to_string_pretty(&config)
-        .map_err(|e| format!("Serialization error: {}", e))?;
+    let json_str =
+        serde_json::to_string_pretty(&config).map_err(|e| format!("Serialization error: {}", e))?;
 
-    let mut file = File::create(output)
-        .map_err(|e| format!("Error creating key file {}: {}", output, e))?;
+    let mut file =
+        File::create(output).map_err(|e| format!("Error creating key file {}: {}", output, e))?;
 
     file.write_all(json_str.as_bytes())
         .map_err(|e| format!("Error writing key file {}: {}", output, e))?;
@@ -901,8 +938,9 @@ pub fn generate_keypair(output: &str) -> Result<String, String> {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[pyfunction]
+#[allow(clippy::useless_conversion)]
 pub fn gen_keys(output: String) -> PyResult<String> {
-    generate_keypair(&output).map_err(|e| PyRuntimeError::new_err(e))
+    generate_keypair(&output).map_err(PyRuntimeError::new_err)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

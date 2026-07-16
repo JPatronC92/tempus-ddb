@@ -75,6 +75,10 @@ enum Commands {
         #[arg(long, default_value = "tempus.db")]
         db: String,
 
+        /// Path to the gate key that authorizes this registration
+        #[arg(long, default_value = "gate.keys.json")]
+        keyfile: String,
+
         /// Ed25519 public key in hex format (64 hex chars)
         #[arg(long, alias = "public-key")]
         public_key: String,
@@ -92,6 +96,52 @@ enum Commands {
         #[arg(long, default_value = "tempus.db")]
         db: String,
     },
+    /// Request a single-use B2A action authorization
+    RequestAction {
+        #[arg(long, default_value = "tempus.db")]
+        db: String,
+        #[arg(long, default_value = "gate.keys.json")]
+        gate_keyfile: String,
+        #[arg(long)]
+        agent_keyfile: String,
+        /// JSON action intent using tempus.action-intent.v1
+        #[arg(long)]
+        intent: String,
+        #[arg(long, default_value = "60")]
+        ttl_seconds: u64,
+    },
+    /// Commit the executor outcome for an allowed action
+    CommitOutcome {
+        #[arg(long, default_value = "tempus.db")]
+        db: String,
+        #[arg(long, default_value = "gate.keys.json")]
+        gate_keyfile: String,
+        #[arg(long)]
+        authorization_id: String,
+        /// JSON action outcome using tempus.action-outcome.v1
+        #[arg(long)]
+        outcome: String,
+        #[arg(long)]
+        executor_keyfile: String,
+    },
+    /// Return a complete B2A action trace
+    Trace {
+        #[arg(long, default_value = "tempus.db")]
+        db: String,
+        #[arg(long, default_value = "gate.keys.json")]
+        gate_keyfile: String,
+        #[arg(long)]
+        action_id: String,
+    },
+    /// Verify a B2A action trace end to end
+    VerifyTrace {
+        #[arg(long, default_value = "tempus.db")]
+        db: String,
+        #[arg(long, default_value = "gate.keys.json")]
+        gate_keyfile: String,
+        #[arg(long)]
+        action_id: String,
+    },
 }
 
 fn main() {
@@ -107,25 +157,23 @@ fn main() {
                 }
             }
         }
-        Commands::GenKeys { output } => {
-            match _tempus_ddb::generate_keypair(&output) {
-                Ok(json_str) => {
-                    eprintln!("Cryptographic keys generated and saved to: {}", output);
-                    let val: Value = serde_json::from_str(&json_str).unwrap();
-                    println!(
-                        "{}",
-                        serde_json::to_string(&serde_json::json!({
-                            "public_key": val.get("public_key")
-                        }))
-                        .unwrap()
-                    );
-                }
-                Err(e) => {
-                    eprintln!("Error generating keys: {}", e);
-                    std::process::exit(1);
-                }
+        Commands::GenKeys { output } => match _tempus_ddb::generate_keypair(&output) {
+            Ok(json_str) => {
+                eprintln!("Cryptographic keys generated and saved to: {}", output);
+                let val: Value = serde_json::from_str(&json_str).unwrap();
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({
+                        "public_key": val.get("public_key")
+                    }))
+                    .unwrap()
+                );
             }
-        }
+            Err(e) => {
+                eprintln!("Error generating keys: {}", e);
+                std::process::exit(1);
+            }
+        },
         Commands::Record {
             db,
             payload,
@@ -154,7 +202,8 @@ fn main() {
                     "status": "success",
                     "action": "recorded",
                     "latest_hash": latest
-                })).unwrap()
+                }))
+                .unwrap()
             );
         }
         Commands::Validate { db } => {
@@ -225,7 +274,8 @@ fn main() {
                     "{}",
                     serde_json::to_string(&serde_json::json!({
                         "total_decisions": count
-                    })).unwrap()
+                    }))
+                    .unwrap()
                 ),
                 Err(e) => {
                     eprintln!("Error counting decisions: {}", e);
@@ -233,8 +283,14 @@ fn main() {
                 }
             }
         }
-        Commands::RegisterAgent { db, public_key, alias, metadata } => {
-            let storage = match _tempus_ddb::SqliteStorage::new(db, "keys.json".to_string()) {
+        Commands::RegisterAgent {
+            db,
+            keyfile,
+            public_key,
+            alias,
+            metadata,
+        } => {
+            let storage = match _tempus_ddb::SqliteStorage::new(db, keyfile) {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("Error opening database: {}", e);
@@ -263,6 +319,95 @@ fn main() {
                 Ok(json) => println!("{}", json),
                 Err(e) => {
                     eprintln!("Error listing agents: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::RequestAction {
+            db,
+            gate_keyfile,
+            agent_keyfile,
+            intent,
+            ttl_seconds,
+        } => {
+            let storage = match _tempus_ddb::SqliteStorage::new(db, gate_keyfile) {
+                Ok(storage) => storage,
+                Err(error) => {
+                    eprintln!("Error opening gate: {error}");
+                    std::process::exit(1);
+                }
+            };
+            match storage.request_action(&intent, &agent_keyfile, ttl_seconds) {
+                Ok(json) => println!("{json}"),
+                Err(error) => {
+                    eprintln!("Error requesting action: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::CommitOutcome {
+            db,
+            gate_keyfile,
+            authorization_id,
+            outcome,
+            executor_keyfile,
+        } => {
+            let storage = match _tempus_ddb::SqliteStorage::new(db, gate_keyfile) {
+                Ok(storage) => storage,
+                Err(error) => {
+                    eprintln!("Error opening gate: {error}");
+                    std::process::exit(1);
+                }
+            };
+            match storage.commit_outcome(&authorization_id, &outcome, &executor_keyfile) {
+                Ok(json) => println!("{json}"),
+                Err(error) => {
+                    eprintln!("Error committing outcome: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::Trace {
+            db,
+            gate_keyfile,
+            action_id,
+        } => {
+            let storage = match _tempus_ddb::SqliteStorage::new(db, gate_keyfile) {
+                Ok(storage) => storage,
+                Err(error) => {
+                    eprintln!("Error opening gate: {error}");
+                    std::process::exit(1);
+                }
+            };
+            match storage.get_trace(&action_id) {
+                Ok(json) => println!("{json}"),
+                Err(error) => {
+                    eprintln!("Error reading trace: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::VerifyTrace {
+            db,
+            gate_keyfile,
+            action_id,
+        } => {
+            let storage = match _tempus_ddb::SqliteStorage::new(db, gate_keyfile) {
+                Ok(storage) => storage,
+                Err(error) => {
+                    eprintln!("Error opening gate: {error}");
+                    std::process::exit(1);
+                }
+            };
+            match storage.verify_trace(&action_id) {
+                Ok(json) => {
+                    println!("{json}");
+                    if json.contains("\"status\":\"INVALID\"") {
+                        std::process::exit(2);
+                    }
+                }
+                Err(error) => {
+                    eprintln!("Error verifying trace: {error}");
                     std::process::exit(1);
                 }
             }
