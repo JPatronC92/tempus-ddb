@@ -137,6 +137,24 @@ impl SqliteStorage {
         )
         .map_err(|e| format!("Failed to create causal depth index: {}", e))?;
 
+        // --- Multi-Signer: Agents registry ---
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS agents (
+                public_key TEXT PRIMARY KEY,
+                alias TEXT,
+                registered_at INTEGER NOT NULL,
+                metadata TEXT DEFAULT '{}'
+            );",
+            [],
+        )
+        .map_err(|e| format!("Failed to create agents table: {}", e))?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agents_alias ON agents (alias);",
+            [],
+        )
+        .map_err(|e| format!("Failed to create agents alias index: {}", e))?;
+
         Ok(Self { conn, keyfile })
     }
 
@@ -405,21 +423,131 @@ impl SqliteStorage {
             }
         }
 
+        // Check for unregistered actors (warnings, not errors)
+        let mut warnings = Vec::new();
+        let mut unique_actors: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for d in &decisions {
+            unique_actors.insert(d.actor_id.clone());
+        }
+        for actor in &unique_actors {
+            let registered: bool = self.conn.prepare(
+                "SELECT 1 FROM agents WHERE public_key = ?1 LIMIT 1"
+            ).and_then(|mut s| s.exists([actor]))
+            .unwrap_or(false);
+            if !registered {
+                warnings.push(format!("Actor '{}' is not registered in the agents table.", actor));
+            }
+        }
+
         if errors.is_empty() {
-            Ok(serde_json::to_string(&serde_json::json!({
+            let mut result = serde_json::json!({
                 "status": "valid",
                 "message": "All decisions verified successfully.",
-                "total_records": decisions.len()
-            }))
-            .unwrap())
+                "total_records": decisions.len(),
+                "unique_actors": unique_actors.len()
+            });
+            if !warnings.is_empty() {
+                result["warnings"] = serde_json::json!(warnings);
+            }
+            Ok(serde_json::to_string(&result).unwrap())
         } else {
-            Err(serde_json::to_string(&serde_json::json!({
+            let mut result = serde_json::json!({
                 "status": "invalid",
                 "errors": errors,
                 "total_records": decisions.len()
-            }))
-            .unwrap())
+            });
+            if !warnings.is_empty() {
+                result["warnings"] = serde_json::json!(warnings);
+            }
+            Err(serde_json::to_string(&result).unwrap())
         }
+    }
+
+    // --- Multi-Signer: Agent management methods ---
+
+    /// Register an agent in the ledger's agent registry.
+    pub fn register_agent(&self, public_key: &str, alias: &str, metadata: &str) -> Result<String, String> {
+        // Validate metadata is valid JSON
+        serde_json::from_str::<serde_json::Value>(metadata)
+            .map_err(|e| format!("Metadata is not valid JSON: {}", e))?;
+
+        // Validate public_key is valid hex (32 bytes = 64 hex chars)
+        let pk_bytes = hex::decode(public_key)
+            .map_err(|e| format!("Invalid public key hex: {}", e))?;
+        if pk_bytes.len() != 32 {
+            return Err(format!("Public key must be 32 bytes (64 hex chars), got {} bytes", pk_bytes.len()));
+        }
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .map_err(|e| format!("System time error: {}", e))?
+            .as_micros() as u64;
+
+        self.conn.execute(
+            "INSERT OR REPLACE INTO agents (public_key, alias, registered_at, metadata) VALUES (?1, ?2, ?3, ?4)",
+            (public_key, alias, timestamp, metadata),
+        ).map_err(|e| format!("Failed to register agent: {}", e))?;
+
+        Ok(serde_json::to_string(&serde_json::json!({
+            "status": "success",
+            "message": format!("Agent '{}' registered successfully.", alias),
+            "public_key": public_key,
+            "alias": alias
+        })).unwrap())
+    }
+
+    /// List all registered agents.
+    pub fn list_agents(&self) -> Result<String, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT public_key, alias, registered_at, metadata FROM agents ORDER BY registered_at ASC"
+        ).map_err(|e| format!("Failed to prepare agents query: {}", e))?;
+
+        let rows = stmt.query_map([], |row| {
+            let pk: String = row.get(0)?;
+            let alias: String = row.get(1)?;
+            let registered_at: u64 = row.get(2)?;
+            let metadata: String = row.get(3)?;
+            Ok(serde_json::json!({
+                "public_key": pk,
+                "alias": alias,
+                "registered_at": registered_at,
+                "metadata": serde_json::from_str::<serde_json::Value>(&metadata).unwrap_or(serde_json::json!({}))
+            }))
+        }).map_err(|e| format!("Failed to query agents: {}", e))?;
+
+        let mut agents = Vec::new();
+        for r in rows {
+            match r {
+                Ok(a) => agents.push(a),
+                Err(e) => return Err(format!("Error reading agent: {}", e)),
+            }
+        }
+
+        serde_json::to_string(&agents)
+            .map_err(|e| format!("Failed to serialize agents: {}", e))
+    }
+
+    /// Get a single agent by public key.
+    pub fn get_agent(&self, public_key: &str) -> Result<String, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT public_key, alias, registered_at, metadata FROM agents WHERE public_key = ?1"
+        ).map_err(|e| format!("Failed to prepare agent query: {}", e))?;
+
+        let result = stmt.query_row([public_key], |row| {
+            let pk: String = row.get(0)?;
+            let alias: String = row.get(1)?;
+            let registered_at: u64 = row.get(2)?;
+            let metadata: String = row.get(3)?;
+            Ok(serde_json::json!({
+                "public_key": pk,
+                "alias": alias,
+                "registered_at": registered_at,
+                "metadata": serde_json::from_str::<serde_json::Value>(&metadata).unwrap_or(serde_json::json!({}))
+            }))
+        }).map_err(|e| format!("Agent not found: {}", e))?;
+
+        serde_json::to_string(&result)
+            .map_err(|e| format!("Failed to serialize agent: {}", e))
     }
 }
 
@@ -675,6 +803,56 @@ impl TempusDDB {
         self.storage
             .count_decisions()
             .map_err(|e| PyRuntimeError::new_err(e))
+    }
+
+    // --- Multi-Signer: Agent management ---
+
+    #[pyo3(signature = (public_key, alias, metadata="{}".to_string()))]
+    fn register_agent(&self, public_key: &str, alias: &str, metadata: String) -> PyResult<String> {
+        self.storage
+            .register_agent(public_key, alias, &metadata)
+            .map_err(|e| PyRuntimeError::new_err(e))
+    }
+
+    #[pyo3(signature = ())]
+    fn list_agents(&self) -> PyResult<String> {
+        self.storage
+            .list_agents()
+            .map_err(|e| PyRuntimeError::new_err(e))
+    }
+
+    #[pyo3(signature = (public_key,))]
+    fn get_agent(&self, public_key: &str) -> PyResult<String> {
+        self.storage
+            .get_agent(public_key)
+            .map_err(|e| PyRuntimeError::new_err(e))
+    }
+
+    /// Return the public key of the current keyfile ("who am I?").
+    #[pyo3(signature = ())]
+    fn whoami(&self) -> PyResult<String> {
+        let signing_key = self.storage
+            .load_signing_key()
+            .map_err(|e| PyRuntimeError::new_err(e))?;
+        let verifying_key = signing_key.verifying_key();
+        let public_key = hex::encode(verifying_key.to_bytes());
+
+        // Try to find the agent alias
+        let alias = match self.storage.get_agent(&public_key) {
+            Ok(json_str) => {
+                serde_json::from_str::<serde_json::Value>(&json_str)
+                    .ok()
+                    .and_then(|v| v["alias"].as_str().map(|s| s.to_string()))
+                    .unwrap_or_default()
+            }
+            Err(_) => String::new(),
+        };
+
+        Ok(serde_json::to_string(&serde_json::json!({
+            "public_key": public_key,
+            "alias": alias,
+            "keyfile": self.keyfile
+        })).unwrap())
     }
 }
 

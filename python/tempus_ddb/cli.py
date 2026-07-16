@@ -245,6 +245,85 @@ def run_count(args):
         sys.exit(1)
 
 
+def run_register_agent(args):
+    """Register an agent in the ledger's identity registry."""
+    db_path, keyfile = _resolve_paths(args)
+
+    if not os.path.exists(db_path):
+        print("✗ No database found. Run 'tempus init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        # If no --public-key provided, extract from keyfile
+        public_key = getattr(args, 'public_key', None)
+        if not public_key:
+            agent_keyfile = getattr(args, 'agent_keyfile', None) or keyfile
+            if not os.path.exists(agent_keyfile):
+                print(f"✗ Key file not found: {agent_keyfile}", file=sys.stderr)
+                sys.exit(1)
+            with open(agent_keyfile, encoding='utf-8') as f:
+                key_data = json.load(f)
+            public_key = key_data.get('public_key')
+            if not public_key:
+                print("✗ Key file does not contain 'public_key'.", file=sys.stderr)
+                sys.exit(1)
+
+        db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE)
+        metadata = getattr(args, 'metadata', '{}') or '{}'
+        result = db.register_agent(public_key, args.alias, metadata)
+        parsed = json.loads(result)
+        print(f"✓ Agent '{args.alias}' registered.")
+        print(f"  Public key: {parsed.get('public_key', public_key)}")
+    except Exception as e:
+        print(f"✗ Registration failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_list_agents(args):
+    """List all registered agents."""
+    db_path, keyfile = _resolve_paths(args)
+
+    if not os.path.exists(db_path):
+        print("✗ No database found. Run 'tempus init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE)
+        result = db.list_agents()
+        agents = json.loads(result)
+        if not agents:
+            print("No agents registered yet. Use 'tempus register-agent' to add one.")
+        else:
+            print(json.dumps(agents, indent=2))
+    except Exception as e:
+        print(f"✗ List agents failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_whoami(args):
+    """Show the identity of the current keyfile."""
+    db_path, keyfile = _resolve_paths(args)
+
+    if not os.path.exists(keyfile):
+        print(f"✗ Key file not found: {keyfile}. Run 'tempus init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        db = TempusDDB(db_path if os.path.exists(db_path) else ":memory:", keyfile)
+        result = db.whoami()
+        parsed = json.loads(result)
+        print(f"Public Key: {parsed.get('public_key')}")
+        alias = parsed.get('alias', '')
+        if alias:
+            print(f"Alias:      {alias}")
+        else:
+            print("Alias:      (not registered — use 'tempus register-agent')")
+        print(f"Key File:   {parsed.get('keyfile')}")
+    except Exception as e:
+        print(f"✗ Whoami failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def run_version():
     print(f"tempus {__version__}")
 
@@ -302,6 +381,19 @@ def main():
     # count
     subparsers.add_parser("count", help="Count the total number of decisions in the ledger")
 
+    # register-agent
+    reg_agent_p = subparsers.add_parser("register-agent", help="Register an agent identity in the ledger")
+    reg_agent_p.add_argument("--alias", required=True, help="Human-readable alias for the agent")
+    reg_agent_p.add_argument("--public-key", dest="public_key", default=None, help="Ed25519 public key (hex). If omitted, extracted from --agent-keyfile or --keyfile")
+    reg_agent_p.add_argument("--agent-keyfile", dest="agent_keyfile", default=None, help="Path to the agent's key file (used to extract public key)")
+    reg_agent_p.add_argument("--metadata", default="{}", help="JSON metadata for the agent")
+
+    # list-agents
+    subparsers.add_parser("list-agents", help="List all registered agents")
+
+    # whoami
+    subparsers.add_parser("whoami", help="Show the identity of the current keyfile")
+
     args = parser.parse_args()
 
     if getattr(args, "version", False):
@@ -325,6 +417,12 @@ def main():
             run_list(args)
         elif args.command == "count":
             run_count(args)
+        elif args.command == "register-agent":
+            run_register_agent(args)
+        elif args.command == "list-agents":
+            run_list_agents(args)
+        elif args.command == "whoami":
+            run_whoami(args)
         elif args.command is None:
             parser.print_help()
         else:

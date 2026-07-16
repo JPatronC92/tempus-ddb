@@ -70,6 +70,28 @@ enum Commands {
         #[arg(long, default_value = "tempus.db")]
         db: String,
     },
+    /// Register an agent in the ledger's identity registry
+    RegisterAgent {
+        #[arg(long, default_value = "tempus.db")]
+        db: String,
+
+        /// Ed25519 public key in hex format (64 hex chars)
+        #[arg(long, alias = "public-key")]
+        public_key: String,
+
+        /// Human-readable alias for the agent
+        #[arg(long)]
+        alias: String,
+
+        /// Optional JSON metadata for the agent
+        #[arg(long, default_value = "{}")]
+        metadata: String,
+    },
+    /// List all registered agents
+    ListAgents {
+        #[arg(long, default_value = "tempus.db")]
+        db: String,
+    },
 }
 
 fn main() {
@@ -207,6 +229,40 @@ fn main() {
                 ),
                 Err(e) => {
                     eprintln!("Error counting decisions: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::RegisterAgent { db, public_key, alias, metadata } => {
+            let storage = match _tempus_ddb::SqliteStorage::new(db, "keys.json".to_string()) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error opening database: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            match storage.register_agent(&public_key, &alias, &metadata) {
+                Ok(json) => println!("{}", json),
+                Err(e) => {
+                    eprintln!("Error registering agent: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::ListAgents { db } => {
+            let storage = match _tempus_ddb::SqliteStorage::new(db, "keys.json".to_string()) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error opening database: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            match storage.list_agents() {
+                Ok(json) => println!("{}", json),
+                Err(e) => {
+                    eprintln!("Error listing agents: {}", e);
                     std::process::exit(1);
                 }
             }

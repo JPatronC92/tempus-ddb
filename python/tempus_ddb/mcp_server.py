@@ -145,6 +145,43 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
                 "required": []
             }
+        ),
+        Tool(
+            name="tempus_register_agent",
+            description="Register an agent identity in the ledger. Each agent has a unique Ed25519 public key and a human-readable alias.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Database file path"},
+                    "public_key": {"type": "string", "description": "Ed25519 public key (64 hex chars)"},
+                    "alias": {"type": "string", "description": "Human-readable alias for the agent"},
+                    "metadata": {"type": "string", "description": "Optional JSON metadata for the agent"}
+                },
+                "required": ["db", "public_key", "alias"]
+            }
+        ),
+        Tool(
+            name="tempus_list_agents",
+            description="List all registered agents in the ledger.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Database file path"}
+                },
+                "required": ["db"]
+            }
+        ),
+        Tool(
+            name="tempus_whoami",
+            description="Return the identity (public key and alias) of the current agent based on the keyfile.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Database file path"},
+                    "keyfile": {"type": "string", "description": "Path to the agent's key file"}
+                },
+                "required": ["db", "keyfile"]
+            }
         )
     ]
 
@@ -272,6 +309,42 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "status": "success",
                 "message": "Cleanup successful.",
                 "removed": removed
+            }, indent=2))]
+
+        elif name == "tempus_register_agent":
+            db_path = validate_path(arguments.get("db", "tempus.db"))
+            public_key = arguments["public_key"]
+            alias = arguments["alias"]
+            metadata = arguments.get("metadata", "{}")
+            db = TempusDDB(db_path, "keys.json")
+            output = db.register_agent(public_key, alias, metadata)
+            return [TextContent(type="text", text=json.dumps({
+                "status": "success",
+                "message": f"Agent '{alias}' registered.",
+                "db_path": db_path,
+                "result": json.loads(output) if isinstance(output, str) else output
+            }, indent=2))]
+
+        elif name == "tempus_list_agents":
+            db_path = validate_path(arguments.get("db", "tempus.db"))
+            db = TempusDDB(db_path, "keys.json")
+            output = db.list_agents()
+            return [TextContent(type="text", text=json.dumps({
+                "status": "success",
+                "message": "Agents listed.",
+                "db_path": db_path,
+                "agents": json.loads(output) if isinstance(output, str) else output
+            }, indent=2))]
+
+        elif name == "tempus_whoami":
+            db_path = validate_path(arguments.get("db", "tempus.db"))
+            keyfile = validate_path(arguments.get("keyfile", "keys.json"))
+            db = TempusDDB(db_path, keyfile)
+            output = db.whoami()
+            return [TextContent(type="text", text=json.dumps({
+                "status": "success",
+                "message": "Agent identity retrieved.",
+                "identity": json.loads(output) if isinstance(output, str) else output
             }, indent=2))]
 
         else:
