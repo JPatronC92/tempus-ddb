@@ -11,9 +11,20 @@ try:
 except importlib.metadata.PackageNotFoundError:
     __version__ = "unknown"
 
-def run_init():
-    keyfile = "keys.json"
-    db_path = "tempus.db"
+# --- Default paths (used when global args are not provided) ---
+DEFAULT_KEYFILE = "keys.json"
+DEFAULT_DB = "tempus.db"
+
+
+def _resolve_paths(args):
+    """Extract db and keyfile paths from global args, falling back to defaults."""
+    db = getattr(args, "db", None) or DEFAULT_DB
+    keyfile = getattr(args, "keyfile", None) or DEFAULT_KEYFILE
+    return db, keyfile
+
+
+def run_init(args):
+    db_path, keyfile = _resolve_paths(args)
 
     if os.path.exists(keyfile):
         print(f"[{keyfile}] already exists — skipping key generation.")
@@ -39,16 +50,15 @@ def run_init():
         print(f"✗ Failed to initialize database: {e}", file=sys.stderr)
         sys.exit(1)
 
-def run_verify():
-    keyfile = "keys.json"
-    db_path = "tempus.db"
+def run_verify(args):
+    db_path, keyfile = _resolve_paths(args)
 
     if not os.path.exists(db_path):
         print("✗ No database found. Run 'tempus init' first.", file=sys.stderr)
         sys.exit(1)
 
     try:
-        db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else "keys.json")
+        db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE)
         result = db.validate()
         result_str = str(result).lower()
         if "invalid" in result_str or "error" in result_str or "mismatch" in result_str:
@@ -63,9 +73,8 @@ def run_verify():
         sys.exit(1)
 
 
-def run_status():
-    keyfile = "keys.json"
-    db_path = "tempus.db"
+def run_status(args):
+    db_path, keyfile = _resolve_paths(args)
 
     print("Tempus DDB Status")
     print("=================")
@@ -89,7 +98,7 @@ def run_status():
             print(f"✓ Database: {db_path}")
 
         try:
-            db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else "keys.json")
+            db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE)
             validation = db.validate()
             val_str = str(validation).lower()
 
@@ -98,6 +107,13 @@ def run_status():
                 print(f"  Details: {validation}")
             else:
                 print("✓ Chain integrity: VALID")
+
+            # Show record count
+            try:
+                count = db.count()
+                print(f"  Total decisions: {count}")
+            except Exception:
+                pass
 
             # Try to show last hash if present in result
             try:
@@ -123,8 +139,7 @@ def run_status():
 
 def run_record(args):
     """Direct CLI recording (task D improvement)."""
-    keyfile = args.keyfile or "keys.json"
-    db_path = args.db or "tempus.db"
+    db_path, keyfile = _resolve_paths(args)
 
     if not os.path.exists(keyfile):
         print("✗ No keys found. Run 'tempus init' first.", file=sys.stderr)
@@ -173,6 +188,63 @@ def run_record(args):
             print(f"✗ Record failed: {err_msg}", file=sys.stderr)
         sys.exit(1)
 
+
+def run_export(args):
+    """Export the entire ledger as a JSON array."""
+    db_path, keyfile = _resolve_paths(args)
+
+    if not os.path.exists(db_path):
+        print("✗ No database found. Run 'tempus init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE)
+        result = db.export()
+        print(result)
+    except Exception as e:
+        print(f"✗ Export failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_list(args):
+    """List decisions with pagination."""
+    db_path, keyfile = _resolve_paths(args)
+
+    if not os.path.exists(db_path):
+        print("✗ No database found. Run 'tempus init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE)
+        result = db.list(limit=args.limit, offset=args.offset)
+        # Pretty-print the JSON output
+        try:
+            parsed = json.loads(result)
+            print(json.dumps(parsed, indent=2))
+        except (json.JSONDecodeError, TypeError):
+            print(result)
+    except Exception as e:
+        print(f"✗ List failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_count(args):
+    """Count the total number of decisions in the ledger."""
+    db_path, keyfile = _resolve_paths(args)
+
+    if not os.path.exists(db_path):
+        print("✗ No database found. Run 'tempus init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE)
+        count = db.count()
+        print(json.dumps({"total_decisions": count}))
+    except Exception as e:
+        print(f"✗ Count failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def run_version():
     print(f"tempus {__version__}")
 
@@ -184,6 +256,15 @@ def main():
     parser.add_argument(
         "--version", action="store_true",
         help="Show version and exit"
+    )
+    # Global arguments available to all subcommands
+    parser.add_argument(
+        "--db", default=DEFAULT_DB,
+        help=f"Path to the ledger database (default: {DEFAULT_DB})"
+    )
+    parser.add_argument(
+        "--keyfile", default=DEFAULT_KEYFILE,
+        help=f"Path to the Ed25519 key file (default: {DEFAULT_KEYFILE})"
     )
 
     subparsers = parser.add_subparsers(dest="command", required=False)
@@ -204,13 +285,22 @@ def main():
 
     # record (new/improved for CLI users)
     record_p = subparsers.add_parser("record", help="Record a decision directly from CLI")
-    record_p.add_argument("--db", default="tempus.db", help="Path to the ledger database")
-    record_p.add_argument("--keyfile", default="keys.json", help="Path to Ed25519 key file")
     record_p.add_argument("--payload", required=True, help="JSON string or path to JSON file with the decision")
     record_p.add_argument("--rules", required=True, help="JSON string or path to JSON file with the rules applied")
     record_p.add_argument("--genesis", action="store_true", help="Mark this as the first decision in the chain")
     # Note: Parent chaining for audit should be included inside the JSON payload.
     # The core ledger is append-only controlled by the `genesis` flag.
+
+    # export
+    subparsers.add_parser("export", help="Export the entire ledger as a JSON array")
+
+    # list
+    list_p = subparsers.add_parser("list", help="List decisions with pagination")
+    list_p.add_argument("--limit", type=int, default=10, help="Maximum number of records to return (default: 10)")
+    list_p.add_argument("--offset", type=int, default=0, help="Number of records to skip (default: 0)")
+
+    # count
+    subparsers.add_parser("count", help="Count the total number of decisions in the ledger")
 
     args = parser.parse_args()
 
@@ -220,15 +310,21 @@ def main():
 
     try:
         if args.command == "init":
-            run_init()
+            run_init(args)
         elif args.command == "mcp" and getattr(args, "mcp_cmd", None) == "start":
             main_sync()
         elif args.command == "verify":
-            run_verify()
+            run_verify(args)
         elif args.command == "status":
-            run_status()
+            run_status(args)
         elif args.command == "record":
             run_record(args)
+        elif args.command == "export":
+            run_export(args)
+        elif args.command == "list":
+            run_list(args)
+        elif args.command == "count":
+            run_count(args)
         elif args.command is None:
             parser.print_help()
         else:

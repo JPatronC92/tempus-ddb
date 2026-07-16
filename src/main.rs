@@ -52,6 +52,24 @@ enum Commands {
         #[arg(long, default_value = "tempus.db")]
         db: String,
     },
+    /// List decisions with optional pagination
+    List {
+        #[arg(long, default_value = "tempus.db")]
+        db: String,
+
+        /// Maximum number of records to return
+        #[arg(long, default_value = "10")]
+        limit: u32,
+
+        /// Number of records to skip
+        #[arg(long, default_value = "0")]
+        offset: u32,
+    },
+    /// Count the total number of decisions in the ledger
+    Count {
+        #[arg(long, default_value = "tempus.db")]
+        db: String,
+    },
 }
 
 fn main() {
@@ -148,6 +166,47 @@ fn main() {
                 Ok(json) => println!("{}", json),
                 Err(e) => {
                     eprintln!("Error exporting ledger: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::List { db, limit, offset } => {
+            let storage = match _tempus_ddb::SqliteStorage::new(db, "keys.json".to_string()) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error opening database: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            use _tempus_ddb::StorageLayer;
+            match storage.list_decisions(limit, offset) {
+                Ok(json) => println!("{}", json),
+                Err(e) => {
+                    eprintln!("Error listing decisions: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::Count { db } => {
+            let storage = match _tempus_ddb::SqliteStorage::new(db, "keys.json".to_string()) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error opening database: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            use _tempus_ddb::StorageLayer;
+            match storage.count_decisions() {
+                Ok(count) => println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({
+                        "total_decisions": count
+                    })).unwrap()
+                ),
+                Err(e) => {
+                    eprintln!("Error counting decisions: {}", e);
                     std::process::exit(1);
                 }
             }

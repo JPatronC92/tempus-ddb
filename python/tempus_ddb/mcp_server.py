@@ -62,8 +62,8 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="tempus_record",
-            description="Record a new decision in the local ledger.",
+            name="tempus_record_decision",
+            description="Record a new decision in the local ledger. Alias: tempus_record.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -77,8 +77,8 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="tempus_record_decision",
-            description="Record a new decision in the local ledger.",
+            name="tempus_record",
+            description="Alias for tempus_record_decision. Record a new decision in the local ledger.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -103,6 +103,41 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
+            name="tempus_list",
+            description="List decisions in the ledger with optional pagination. Returns most recent first.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Database file path"},
+                    "limit": {"type": "integer", "description": "Maximum number of records to return (default: 10)"},
+                    "offset": {"type": "integer", "description": "Number of records to skip (default: 0)"},
+                },
+                "required": ["db"]
+            }
+        ),
+        Tool(
+            name="tempus_export",
+            description="Export all decisions as a JSON array ordered by causal depth.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Database file path"}
+                },
+                "required": ["db"]
+            }
+        ),
+        Tool(
+            name="tempus_count",
+            description="Count the total number of decisions in the ledger.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Database file path"}
+                },
+                "required": ["db"]
+            }
+        ),
+        Tool(
             name="tempus_cleanup",
             description="Delete the database and keys in the sandbox to start fresh.",
             inputSchema={
@@ -112,6 +147,32 @@ async def list_tools() -> list[Tool]:
             }
         )
     ]
+
+
+def _handle_record(arguments: dict) -> list[TextContent]:
+    """Shared implementation for tempus_record and tempus_record_decision."""
+    payload = arguments["payload"]
+    rules = arguments["rules"]
+    validate_json_string(payload, "payload")
+    validate_json_string(rules, "rules")
+
+    db = validate_path(arguments["db"])
+    keyfile = validate_path(arguments["keyfile"])
+
+    genesis = arguments.get("genesis", False)
+
+    db_instance = TempusDDB(db, keyfile)
+    output = db_instance.record(payload, rules, genesis)
+
+    result = {
+        "status": "success",
+        "message": "Record successful.",
+        "output": json.loads(output) if isinstance(output, str) and (output.strip().startswith("{") or output.strip().startswith("[")) else output
+    }
+    if TEMPUS_MODE == "demo":
+        result["mode"] = TEMPUS_MODE
+    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
@@ -142,27 +203,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             }, indent=2))]
 
         elif name in ("tempus_record", "tempus_record_decision"):
-            payload = arguments["payload"]
-            rules = arguments["rules"]
-            validate_json_string(payload, "payload")
-            validate_json_string(rules, "rules")
-
-            db = validate_path(arguments["db"])
-            keyfile = validate_path(arguments["keyfile"])
-
-            genesis = arguments.get("genesis", False)
-
-            db_instance = TempusDDB(db, keyfile)
-            output = db_instance.record(payload, rules, genesis)
-
-            result = {
-                "status": "success",
-                "message": "Record successful.",
-                "output": json.loads(output) if isinstance(output, str) and (output.strip().startswith("{") or output.strip().startswith("[")) else output
-            }
-            if TEMPUS_MODE == "demo":
-                result["mode"] = TEMPUS_MODE
-            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            return _handle_record(arguments)
 
         elif name == "tempus_validate":
             db_path = validate_path(arguments.get("db", "tempus.db"))
@@ -182,6 +223,41 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "message": "Validation query completed.",
                 "db_path": db_path,
                 "result": output
+            }, indent=2))]
+
+        elif name == "tempus_list":
+            db_path = validate_path(arguments.get("db", "tempus.db"))
+            limit = arguments.get("limit", 10)
+            offset = arguments.get("offset", 0)
+            db = TempusDDB(db_path, "keys.json")
+            output = db.list(limit=limit, offset=offset)
+            return [TextContent(type="text", text=json.dumps({
+                "status": "success",
+                "message": f"Listed {limit} decisions (offset {offset}).",
+                "db_path": db_path,
+                "decisions": json.loads(output) if isinstance(output, str) else output
+            }, indent=2))]
+
+        elif name == "tempus_export":
+            db_path = validate_path(arguments.get("db", "tempus.db"))
+            db = TempusDDB(db_path, "keys.json")
+            output = db.export()
+            return [TextContent(type="text", text=json.dumps({
+                "status": "success",
+                "message": "Ledger exported successfully.",
+                "db_path": db_path,
+                "decisions": json.loads(output) if isinstance(output, str) else output
+            }, indent=2))]
+
+        elif name == "tempus_count":
+            db_path = validate_path(arguments.get("db", "tempus.db"))
+            db = TempusDDB(db_path, "keys.json")
+            count = db.count()
+            return [TextContent(type="text", text=json.dumps({
+                "status": "success",
+                "message": f"Total decisions: {count}",
+                "db_path": db_path,
+                "total_decisions": count
             }, indent=2))]
 
         elif name == "tempus_cleanup":

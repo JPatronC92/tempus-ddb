@@ -7,12 +7,12 @@ use pyo3::prelude::*;
 use wasm_bindgen::prelude::*;
 
 // --- 1. PATRÓN STORAGE LAYER (TRAIT) ---
-
-// --- 2. PATRÓN STORAGE LAYER (TRAIT) ---
 pub trait StorageLayer {
     fn insert_decision(&mut self, payload: &str, rules: &str, genesis: bool) -> Result<(), String>;
     fn get_latest_hash(&self) -> Result<String, String>;
     fn export_ledger(&self) -> Result<String, String>;
+    fn list_decisions(&self, limit: u32, offset: u32) -> Result<String, String>;
+    fn count_decisions(&self) -> Result<u64, String>;
 }
 
 // Experimental WASM support: in-memory stub storage only, not persistent ledger storage.
@@ -56,6 +56,19 @@ impl StorageLayer for MemoryStorage {
     fn export_ledger(&self) -> Result<String, String> {
         // En una implementación real, serializaríamos a JSON usando serde_json
         Ok(format!("[{}]", self.records.join(",")))
+    }
+
+    fn list_decisions(&self, limit: u32, offset: u32) -> Result<String, String> {
+        let start = offset as usize;
+        let end = std::cmp::min(start + limit as usize, self.records.len());
+        if start >= self.records.len() {
+            return Ok("[]".to_string());
+        }
+        Ok(format!("[{}]", self.records[start..end].join(",")))
+    }
+
+    fn count_decisions(&self) -> Result<u64, String> {
+        Ok(self.records.len() as u64)
     }
 }
 
@@ -551,6 +564,50 @@ impl StorageLayer for SqliteStorage {
         serde_json::to_string(&decisions)
             .map_err(|e| format!("Failed to serialize ledger to JSON: {}", e))
     }
+
+    fn list_decisions(&self, limit: u32, offset: u32) -> Result<String, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, causal_depth, actor_id, timestamp, payload, rules_evaluated, signature
+             FROM decisions
+             ORDER BY causal_depth DESC, timestamp DESC
+             LIMIT ?1 OFFSET ?2"
+        ).map_err(|e| format!("Failed to prepare select statement: {}", e))?;
+
+        let rows = stmt
+            .query_map([limit, offset], |row| {
+                Ok(Decision {
+                    id: row.get(0)?,
+                    parent_id: row.get(1)?,
+                    causal_depth: row.get(2)?,
+                    actor_id: row.get(3)?,
+                    timestamp: row.get(4)?,
+                    payload: row.get(5)?,
+                    rules_evaluated: row.get(6)?,
+                    signature: row.get(7)?,
+                })
+            })
+            .map_err(|e| format!("Failed to execute query: {}", e))?;
+
+        let mut decisions = Vec::new();
+        for r in rows {
+            match r {
+                Ok(d) => decisions.push(d),
+                Err(e) => return Err(format!("Error reading record: {}", e)),
+            }
+        }
+
+        serde_json::to_string(&decisions)
+            .map_err(|e| format!("Failed to serialize decisions to JSON: {}", e))
+    }
+
+    fn count_decisions(&self) -> Result<u64, String> {
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM decisions")
+            .map_err(|e| format!("Failed to prepare count statement: {}", e))?;
+        let count: u64 = stmt
+            .query_row([], |row| row.get(0))
+            .map_err(|e| format!("Failed to count decisions: {}", e))?;
+        Ok(count)
+    }
 }
 // --- 3. BINDINGS PARA PYTHON (PYO3) ---
 #[cfg(not(target_arch = "wasm32"))]
@@ -603,6 +660,20 @@ impl TempusDDB {
     fn export(&self) -> PyResult<String> {
         self.storage
             .export_ledger()
+            .map_err(|e| PyRuntimeError::new_err(e))
+    }
+
+    #[pyo3(signature = (limit=10, offset=0))]
+    fn list(&self, limit: u32, offset: u32) -> PyResult<String> {
+        self.storage
+            .list_decisions(limit, offset)
+            .map_err(|e| PyRuntimeError::new_err(e))
+    }
+
+    #[pyo3(signature = ())]
+    fn count(&self) -> PyResult<u64> {
+        self.storage
+            .count_decisions()
             .map_err(|e| PyRuntimeError::new_err(e))
     }
 }
