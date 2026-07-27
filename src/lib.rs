@@ -947,6 +947,7 @@ pub fn gen_keys(output: String) -> PyResult<String> {
 #[pymodule]
 fn _tempus_ddb(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TempusDDB>()?;
+    m.add_class::<TempusExecutor>()?;
     m.add_function(wrap_pyfunction!(gen_keys, m)?)?;
     Ok(())
 }
@@ -986,5 +987,55 @@ impl TempusDDBWasm {
         self.storage
             .export_ledger()
             .map_err(|e| JsValue::from_str(&e))
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+mod executor;
+
+#[cfg(not(target_arch = "wasm32"))]
+use executor::{MediatedExecutor, SqliteExecutorStorage};
+
+#[cfg(not(target_arch = "wasm32"))]
+#[pyclass(unsendable)]
+pub struct TempusExecutor {
+    inner: MediatedExecutor,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[pymethods]
+impl TempusExecutor {
+    #[new]
+    pub fn new(db_path: String, keyfile: String) -> PyResult<Self> {
+        let storage = SqliteExecutorStorage::new(&db_path);
+        let inner =
+            MediatedExecutor::new(Box::new(storage), &keyfile).map_err(PyRuntimeError::new_err)?;
+        Ok(Self { inner })
+    }
+
+    pub fn verify_and_consume_permit(&self, permit_json: String) -> PyResult<String> {
+        let auth = self
+            .inner
+            .verify_and_consume_permit(&permit_json)
+            .map_err(PyPermissionError::new_err)?;
+        Ok(serde_json::to_string(&auth).unwrap())
+    }
+
+    pub fn complete_execution(
+        &self,
+        authorization_id: String,
+        action_id: String,
+        status: String,
+        output_json: String,
+    ) -> PyResult<String> {
+        let output: serde_json::Value = serde_json::from_str(&output_json)
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid output JSON: {}", e)))?;
+
+        let outcome = self
+            .inner
+            .complete_execution(&authorization_id, &action_id, &status, output)
+            .map_err(PyRuntimeError::new_err)?;
+
+        Ok(outcome)
     }
 }

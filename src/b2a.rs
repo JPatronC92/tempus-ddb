@@ -143,7 +143,7 @@ fn write_canonical(value: &Value, output: &mut String) -> Result<(), String> {
     Ok(())
 }
 
-fn canonicalize(value: &Value) -> Result<String, String> {
+pub(crate) fn canonicalize(value: &Value) -> Result<String, String> {
     let mut output = String::new();
     write_canonical(value, &mut output)?;
     Ok(output)
