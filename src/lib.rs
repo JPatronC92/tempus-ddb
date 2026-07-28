@@ -1006,10 +1006,10 @@ pub struct TempusExecutor {
 #[pymethods]
 impl TempusExecutor {
     #[new]
-    pub fn new(db_path: String, keyfile: String) -> PyResult<Self> {
+    pub fn new(db_path: String, keyfile: String, trusted_gate_id: String, trusted_tenant_id: String) -> PyResult<Self> {
         let storage = SqliteExecutorStorage::new(&db_path);
         let inner =
-            MediatedExecutor::new(Box::new(storage), &keyfile).map_err(PyRuntimeError::new_err)?;
+            MediatedExecutor::new(Box::new(storage), &keyfile, &trusted_gate_id, &trusted_tenant_id).map_err(PyRuntimeError::new_err)?;
         Ok(Self { inner })
     }
 
