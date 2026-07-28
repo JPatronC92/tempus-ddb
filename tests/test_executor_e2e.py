@@ -20,19 +20,22 @@ class MockPurchasingAPI:
 
 class ExecutorProxy:
     """The mediated executor proxy that sits in front of the API."""
-    def __init__(self, db_path: str, keyfile: str, api: MockPurchasingAPI):
-        self.executor = TempusExecutor(db_path, keyfile)
+    def __init__(self, db_path: str, keyfile: str, trusted_gate_id: str, trusted_tenant_id: str, api: MockPurchasingAPI):
+        self.executor = TempusExecutor(db_path, keyfile, trusted_gate_id, trusted_tenant_id)
         self.api = api
 
-    def process_purchase_request(self, permit_json: str, amount: int):
+    def process_purchase_request(self, permit_json: str):
         try:
             # 1. Enforced mediation: Consume permit atomically
             # This verifies signature, expiration, and prevents double-spend via sqlite.
             auth_str = self.executor.verify_and_consume_permit(permit_json)
             auth = json.loads(auth_str)
 
+            permit_obj = json.loads(permit_json)
+            authorized_amount = permit_obj["intent"]["input"]["amount"]
+
             # 2. Effect: Call the real API
-            result = self.api.add_credits(amount)
+            result = self.api.add_credits(authorized_amount)
 
             # 3. Complete execution: Sign outcome
             outcome = self.executor.complete_execution(
@@ -67,7 +70,7 @@ def setup_test_env():
     gate.register_agent(executor_id, "test-executor", "{}")
 
     api = MockPurchasingAPI()
-    proxy = ExecutorProxy(exec_db, "test_executor.keys.json", api)
+    proxy = ExecutorProxy(exec_db, "test_executor.keys.json", gate_id, "test-tenant", api)
 
     return gate, proxy, api, agent_id
 
@@ -90,14 +93,14 @@ def test_successful_purchase_and_replay_prevention():
     permit = json.dumps(auth_result)
 
     # 1. Valid execution
-    outcome = proxy.process_purchase_request(permit, 100)
+    outcome = proxy.process_purchase_request(permit)
     assert "error" not in outcome
     assert outcome["status"] == "SUCCEEDED"
     assert outcome["output"]["credits_added"] == 100
     assert api.purchase_count == 1
 
     # 2. Replay prevention (Agent tries to reuse the SAME permit)
-    outcome2 = proxy.process_purchase_request(permit, 100)
+    outcome2 = proxy.process_purchase_request(permit)
     assert "error" in outcome2
     assert "already consumed or action ID re-used" in outcome2["error"]
     # The API should not have been called again!
@@ -124,7 +127,7 @@ def test_expired_permit():
 
     time.sleep(1.1)
 
-    outcome = proxy.process_purchase_request(permit, 50)
+    outcome = proxy.process_purchase_request(permit)
     assert "error" in outcome
     assert "Permit has expired" in outcome["error"]
     assert api.purchase_count == 0
@@ -149,10 +152,31 @@ def test_tampered_permit():
     auth_result["authorization"]["action_id"] = "fake-action"
     permit = json.dumps(auth_result)
 
-    outcome = proxy.process_purchase_request(permit, 100)
+    outcome = proxy.process_purchase_request(permit)
     assert "error" in outcome
     assert ("Invalid gate signature" in outcome["error"] or "Authorization ID mismatch" in outcome["error"])
     assert api.purchase_count == 0
 
+def test_cross_tenant_permit():
+    gate, proxy, api, agent_id = setup_test_env()
+
+    intent = json.dumps({
+        "schema_version": "tempus.action-intent.v1",
+        "tenant_id": "wrong-tenant",
+        "agent_id": agent_id,
+        "idempotency_key": "purchase-004",
+        "action_type": "purchase",
+        "resource": "api/credits",
+        "requested_at": time.time_ns() // 1_000,
+        "input": {"amount": 100},
+    })
+
+    auth_result = json.loads(gate.request_action(intent, "test_agent.keys.json", 60))
+    permit = json.dumps(auth_result)
+
+    outcome = proxy.process_purchase_request(permit)
+    assert "error" in outcome
+    assert "Cross-tenant permit rejected" in outcome["error"]
+    assert api.purchase_count == 0
 if __name__ == "__main__":
     pytest.main(["-v", "test_executor_e2e.py"])

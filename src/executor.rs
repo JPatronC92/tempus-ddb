@@ -97,13 +97,25 @@ impl ExecutorStorage for SqliteExecutorStorage {
 pub struct MediatedExecutor {
     storage: Box<dyn ExecutorStorage + Send>,
     keypair: SigningKey,
+    trusted_gate_id: String,
+    trusted_tenant_id: String,
 }
 
 impl MediatedExecutor {
-    pub fn new(storage: Box<dyn ExecutorStorage + Send>, keyfile: &str) -> Result<Self, String> {
+    pub fn new(
+        storage: Box<dyn ExecutorStorage + Send>,
+        keyfile: &str,
+        trusted_gate_id: &str,
+        trusted_tenant_id: &str,
+    ) -> Result<Self, String> {
         let keypair = Self::load_keypair(keyfile)?;
         storage.initialize()?;
-        Ok(Self { storage, keypair })
+        Ok(Self {
+            storage,
+            keypair,
+            trusted_gate_id: trusted_gate_id.to_string(),
+            trusted_tenant_id: trusted_tenant_id.to_string(),
+        })
     }
 
     fn load_keypair(path: &str) -> Result<SigningKey, String> {
@@ -127,6 +139,16 @@ impl MediatedExecutor {
         }
 
         let authorization = permit.get("authorization").ok_or("Missing authorization")?;
+
+        let intent = permit.get("intent").ok_or("Missing intent")?;
+        let permit_tenant_id = intent
+            .get("tenant_id")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing tenant_id in intent")?;
+        if permit_tenant_id != self.trusted_tenant_id {
+            return Err("Cross-tenant permit rejected".to_string());
+        }
+
         let gate_signature_hex = authorization
             .get("gate_signature")
             .and_then(|v| v.as_str())
@@ -136,6 +158,11 @@ impl MediatedExecutor {
             .get("gate_id")
             .and_then(|v| v.as_str())
             .ok_or("Missing gate_id")?;
+
+        if gate_id_hex != self.trusted_gate_id {
+            return Err("Untrusted gate ID".to_string());
+        }
+
         let mut pk_bytes = [0u8; 32];
         hex::decode_to_slice(gate_id_hex, &mut pk_bytes).map_err(|e| e.to_string())?;
         let gate_vk = VerifyingKey::from_bytes(&pk_bytes).map_err(|_| "Invalid gate pk")?;
@@ -172,6 +199,21 @@ impl MediatedExecutor {
 
         if authorization.get("decision").and_then(|v| v.as_str()) != Some("ALLOWED") {
             return Err("Permit is not ALLOWED".to_string());
+        }
+
+        let canonical_intent = crate::b2a::canonicalize(intent)?;
+        let mut intent_hasher = Sha256::new();
+        intent_hasher.update(canonical_intent.as_bytes());
+        let intent_digest = intent_hasher.finalize();
+        let expected_intent_hash = hex::encode(intent_digest);
+
+        let permit_intent_hash = authorization
+            .get("intent_hash")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing intent_hash in permit")?;
+
+        if expected_intent_hash != permit_intent_hash {
+            return Err("Intent hash mismatch".to_string());
         }
 
         let expires_at = authorization

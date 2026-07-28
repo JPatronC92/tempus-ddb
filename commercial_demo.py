@@ -7,29 +7,40 @@ from tempus_ddb import TempusDDB, gen_keys, TempusExecutor
 
 class DownstreamAPI:
     """A simulated protected downstream API that only trusts Tempus permits."""
-    def __init__(self, keyfile: str):
-        # The API is protected by a Mediated Executor proxy internally (or explicitly)
-        self.keyfile = keyfile
+    def __init__(self, secret_token: str):
+        self.secret_token = secret_token
+        self.credits = 0
 
-    def process_purchase_request_direct(self, agent_id: str, amount: int):
-        # Without Tempus, the API rejects the request because it demands a permit
-        return {"error": "Acceso denegado: Se requiere un permiso de Tempus válido para interactuar con esta API."}
+    def process_purchase_request(self, token: str, amount: int):
+        # The API explicitly demands a secret token that only the mediated executor knows.
+        if token != self.secret_token:
+            return {"error": "Acceso denegado: Credenciales invalidas."}
+        self.credits += amount
+        return {"credits_added": amount, "total_credits": self.credits}
 
 class ExecutorProxy:
     """The mediated executor proxy that sits in front of the API."""
-    def __init__(self, db_path: str, keyfile: str):
-        self.executor = TempusExecutor(db_path, keyfile)
+    def __init__(self, db_path: str, keyfile: str, trusted_gate_id: str, trusted_tenant_id: str, api: DownstreamAPI, api_secret: str):
+        self.executor = TempusExecutor(db_path, keyfile, trusted_gate_id, trusted_tenant_id)
+        self.api = api
+        self.api_secret = api_secret
         self.purchase_count = 0
 
-    def process_purchase_request(self, permit_json: str, amount: int):
+    def process_purchase_request(self, permit_json: str):
         try:
-            # 1. Enforced mediation: Consume permit atomically
+            # 1. Enforced mediation: Consume permit atomically, verify signatures, gate id, tenant, hash.
             auth_str = self.executor.verify_and_consume_permit(permit_json)
             auth = json.loads(auth_str)
 
-            # 2. Effect: Call the real API
+            permit_obj = json.loads(permit_json)
+            authorized_amount = permit_obj["intent"]["input"]["amount"]
+
+            # 2. Effect: Call the real API with the secret token
+            result = self.api.process_purchase_request(self.api_secret, authorized_amount)
+            if "error" in result:
+                return result
+
             self.purchase_count += 1
-            result = {"credits_added": amount, "total_credits": self.purchase_count * amount}
 
             # 3. Complete execution: Sign outcome
             outcome = self.executor.complete_execution(
@@ -78,19 +89,24 @@ def main():
         gate.register_agent(agent_id, "test-agent", "{}")
         gate.register_agent(executor_id, "test-executor", "{}")
 
-        api = DownstreamAPI(exec_keyfile)
-        proxy = ExecutorProxy(exec_db, exec_keyfile)
+        tenant_id = "demo-tenant"
+        api_secret = "secret_downstream_token_123"
+        api = DownstreamAPI(api_secret)
+        proxy = ExecutorProxy(exec_db, exec_keyfile, gate_id, tenant_id, api, api_secret)
 
         time_ms = time.time_ns() // 1_000_000
 
         print_step("1", "Un agente intenta comprar sin Tempus (Falla)")
-        result_no_tempus = api.process_purchase_request_direct(agent_id, 100)
-        color_print(f"❌ Resultado: {result_no_tempus['error']}", "31")
+        # Agent tries to bypass executor but does not know the secret
+        result_no_tempus = api.process_purchase_request("wrong_token_or_no_token", 100)
+        assert "error" in result_no_tempus
+        assert proxy.purchase_count == 0
+        color_print(f"PASS direct bypass rejected: {result_no_tempus['error']}", "32")
 
         print_step("2", "Un agente intenta comprar con Tempus (Funciona)")
         intent = json.dumps({
             "schema_version": "tempus.action-intent.v1",
-            "tenant_id": "demo-tenant",
+            "tenant_id": tenant_id,
             "agent_id": agent_id,
             "idempotency_key": f"purchase-demo-{time_ms}",
             "action_type": "purchase",
@@ -101,22 +117,24 @@ def main():
 
         auth_result = json.loads(gate.request_action(intent, agent_keyfile, 60))
         permit = json.dumps(auth_result)
-        color_print(f"✅ Permiso de Tempus emitido. ID: {auth_result['authorization']['authorization_id'][:16]}...", "32")
 
-        outcome_success = proxy.process_purchase_request(permit, 100)
-        if "error" not in outcome_success:
-            color_print(f"✅ Ejecución exitosa. Resultado: {outcome_success['output']}", "32")
-        else:
-            color_print(f"❌ Error inesperado: {outcome_success['error']}", "31")
+        outcome_success = proxy.process_purchase_request(permit)
+        assert "error" not in outcome_success
+        assert outcome_success["status"] == "SUCCEEDED"
+        assert outcome_success["output"]["credits_added"] == 100
+        assert proxy.purchase_count == 1
+        color_print(f"PASS valid permit executed. Resultado: {outcome_success['output']}", "32")
 
         print_step("3", "Un replay (reintento del mismo permiso) es rechazado")
-        outcome_replay = proxy.process_purchase_request(permit, 100)
-        color_print(f"❌ Resultado: {outcome_replay.get('error', 'Replay no detectado')}", "31")
+        outcome_replay = proxy.process_purchase_request(permit)
+        assert "error" in outcome_replay
+        assert proxy.purchase_count == 1
+        color_print(f"PASS replay rejected: {outcome_replay['error']}", "32")
 
         print_step("4", "Un permiso expirado es rechazado")
         intent_exp = json.dumps({
             "schema_version": "tempus.action-intent.v1",
-            "tenant_id": "demo-tenant",
+            "tenant_id": tenant_id,
             "agent_id": agent_id,
             "idempotency_key": f"purchase-exp-{time_ms}",
             "action_type": "purchase",
@@ -124,18 +142,18 @@ def main():
             "requested_at": time.time_ns() // 1_000,
             "input": {"amount": 100},
         })
-        # Permit expires in 1 second
         auth_result_exp = json.loads(gate.request_action(intent_exp, agent_keyfile, 1))
         permit_exp = json.dumps(auth_result_exp)
-        print("Esperando 1.5 segundos para que expire el permiso...")
-        time.sleep(1.5)
-        outcome_exp = proxy.process_purchase_request(permit_exp, 100)
-        color_print(f"❌ Resultado: {outcome_exp.get('error', 'Expiración no detectada')}", "31")
+        time.sleep(1.1)
+        outcome_exp = proxy.process_purchase_request(permit_exp)
+        assert "error" in outcome_exp
+        assert proxy.purchase_count == 1
+        color_print(f"PASS expired permit rejected: {outcome_exp['error']}", "32")
 
         print_step("5", "Un permiso alterado es rechazado")
         intent_alt = json.dumps({
             "schema_version": "tempus.action-intent.v1",
-            "tenant_id": "demo-tenant",
+            "tenant_id": tenant_id,
             "agent_id": agent_id,
             "idempotency_key": f"purchase-alt-{time_ms}",
             "action_type": "purchase",
@@ -144,32 +162,60 @@ def main():
             "input": {"amount": 100},
         })
         auth_result_alt = json.loads(gate.request_action(intent_alt, agent_keyfile, 60))
-        # Alter the permit payload
         auth_result_alt["authorization"]["action_id"] = "fake-action-id-123"
         permit_alt = json.dumps(auth_result_alt)
-        outcome_alt = proxy.process_purchase_request(permit_alt, 100)
-        color_print(f"❌ Resultado: {outcome_alt.get('error', 'Alteración no detectada')}", "31")
+        outcome_alt = proxy.process_purchase_request(permit_alt)
+        assert "error" in outcome_alt
+        assert proxy.purchase_count == 1
+        color_print(f"PASS tampered permit rejected: {outcome_alt['error']}", "32")
 
-        print_step("6", "Se genera un receipt verificable")
-        # Commit the original successful outcome to the gate to get the execution receipt
+        print_step("6", "Un permiso cross-tenant es rechazado")
+        intent_cross = json.dumps({
+            "schema_version": "tempus.action-intent.v1",
+            "tenant_id": "other-tenant",
+            "agent_id": agent_id,
+            "idempotency_key": f"purchase-cross-{time_ms}",
+            "action_type": "purchase",
+            "resource": "api/credits",
+            "requested_at": time.time_ns() // 1_000,
+            "input": {"amount": 100},
+        })
+        auth_result_cross = json.loads(gate.request_action(intent_cross, agent_keyfile, 60))
+        permit_cross = json.dumps(auth_result_cross)
+        outcome_cross = proxy.process_purchase_request(permit_cross)
+        assert "error" in outcome_cross
+        assert proxy.purchase_count == 1
+        color_print(f"PASS cross-tenant permit rejected: {outcome_cross['error']}", "32")
+
+        print_step("7", "Se genera un receipt verificable")
         receipt_str = gate.commit_outcome(
             auth_result['authorization']['authorization_id'],
             json.dumps(outcome_success),
             exec_keyfile
         )
         receipt = json.loads(receipt_str)
-        color_print(f"✅ Receipt de ejecución final guardado en Tempus. ID: {receipt['receipt']['receipt_id'][:16]}...", "32")
+        assert receipt["schema_version"] == "tempus.execution-result.v1"
 
         verification_str = gate.verify_trace(auth_result['authorization']['action_id'])
         verification = json.loads(verification_str)
-        if verification.get('status') == 'VERIFIED':
-            color_print(f"✅ Verificación criptográfica completada: {verification['status']} (Fase: {verification['phase']})", "32")
-        else:
-            color_print(f"❌ Fallo en verificación: {verification}", "31")
+        assert verification.get('status') == 'VERIFIED'
+        color_print(f"PASS receipt verified: {verification['status']} (Fase: {verification['phase']})", "32")
+
+        print_step("8", "Resumen de downstream")
+        assert api.credits == 100
+        assert proxy.purchase_count == 1
+        color_print(f"PASS downstream effects = {proxy.purchase_count}", "32")
 
         print("\n================================================================")
-        print(" Demo Finalizada Exitosamente")
+        color_print(" Demo Finalizada Exitosamente (Todas las aserciones pasaron)", "32")
         print("================================================================\n")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except AssertionError as e:
+        color_print(f"\n❌ Assertion Error: Demo fallida en una aserción.", "31")
+        sys.exit(1)
+    except Exception as e:
+        color_print(f"\n❌ Error inesperado: {e}", "31")
+        sys.exit(1)
