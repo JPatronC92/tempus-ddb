@@ -114,6 +114,11 @@ impl SqliteStorage {
     pub fn new(db_path: String, keyfile: String) -> Result<Self, String> {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open SQLite database '{}': {}", db_path, e))?;
+            
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;"
+        ).map_err(|e| e.to_string())?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS decisions (

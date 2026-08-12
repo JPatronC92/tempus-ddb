@@ -24,7 +24,12 @@ impl SqliteExecutorStorage {
     }
 
     fn get_connection(&self) -> Result<Connection, String> {
-        Connection::open(&self.db_path).map_err(|e| e.to_string())
+        let conn = Connection::open(&self.db_path).map_err(|e| e.to_string())?;
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;"
+        ).map_err(|e| e.to_string())?;
+        Ok(conn)
     }
 }
 
