@@ -52,8 +52,10 @@ class ExecutorProxy:
 def setup_test_env():
     gate_db = "test_gate.db"
     exec_db = "test_executor.db"
-    if os.path.exists(gate_db): os.remove(gate_db)
-    if os.path.exists(exec_db): os.remove(exec_db)
+    if os.path.exists(gate_db):
+        os.remove(gate_db)
+    if os.path.exists(exec_db):
+        os.remove(exec_db)
 
     gen_keys("test_gate.keys.json")
     gen_keys("test_agent.keys.json")
@@ -61,9 +63,12 @@ def setup_test_env():
 
     gate = TempusDDB(gate_db, "test_gate.keys.json")
 
-    with open("test_gate.keys.json") as f: gate_id = json.load(f)["public_key"]
-    with open("test_agent.keys.json") as f: agent_id = json.load(f)["public_key"]
-    with open("test_executor.keys.json") as f: executor_id = json.load(f)["public_key"]
+    with open("test_gate.keys.json") as f:
+        gate_id = json.load(f)["public_key"]
+    with open("test_agent.keys.json") as f:
+        agent_id = json.load(f)["public_key"]
+    with open("test_executor.keys.json") as f:
+        executor_id = json.load(f)["public_key"]
 
     gate.register_agent(gate_id, "tempus-gate", '{"can_delegate":true}')
     gate.register_agent(agent_id, "test-agent", "{}")

@@ -81,9 +81,12 @@ def main():
 
         gate = TempusDDB(gate_db, gate_keyfile)
 
-        with open(gate_keyfile) as f: gate_id = json.load(f)["public_key"]
-        with open(agent_keyfile) as f: agent_id = json.load(f)["public_key"]
-        with open(exec_keyfile) as f: executor_id = json.load(f)["public_key"]
+        with open(gate_keyfile) as f:
+            gate_id = json.load(f)["public_key"]
+        with open(agent_keyfile) as f:
+            agent_id = json.load(f)["public_key"]
+        with open(exec_keyfile) as f:
+            executor_id = json.load(f)["public_key"]
 
         gate.register_agent(gate_id, "tempus-gate", '{"can_delegate":true}')
         gate.register_agent(agent_id, "test-agent", "{}")
@@ -213,8 +216,8 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except AssertionError as e:
-        color_print(f"\n❌ Assertion Error: Demo fallida en una aserción.", "31")
+    except AssertionError:
+        color_print("\n❌ Assertion Error: Demo fallida en una aserción.", "31")
         sys.exit(1)
     except Exception as e:
         color_print(f"\n❌ Error inesperado: {e}", "31")

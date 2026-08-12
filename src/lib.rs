@@ -107,6 +107,7 @@ pub struct Decision {
 pub struct SqliteStorage {
     conn: Connection,
     keyfile: String,
+    cached_signing_key: std::cell::RefCell<Option<ed25519_dalek::SigningKey>>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -117,7 +118,8 @@ impl SqliteStorage {
             
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
-             PRAGMA synchronous = NORMAL;"
+             PRAGMA synchronous = NORMAL;
+             PRAGMA busy_timeout = 5000;"
         ).map_err(|e| e.to_string())?;
 
         conn.execute(
@@ -149,11 +151,11 @@ impl SqliteStorage {
 
         b2a::initialize_schema(&conn)?;
 
-        Ok(Self { conn, keyfile })
+        Ok(Self { conn, keyfile, cached_signing_key: std::cell::RefCell::new(None) })
     }
 
-    /// Load an Ed25519 signing key from the keyfile on disk.
-    fn load_signing_key(&self) -> Result<ed25519_dalek::SigningKey, String> {
+    /// Load an Ed25519 signing key from a file path.
+    fn load_signing_key_from_path(keyfile: &str) -> Result<ed25519_dalek::SigningKey, String> {
         #[derive(Deserialize)]
         struct KeyPairConfig {
             #[allow(dead_code)]
@@ -161,8 +163,8 @@ impl SqliteStorage {
             private_key: String,
         }
 
-        let content = std::fs::read_to_string(&self.keyfile)
-            .map_err(|e| format!("Failed to read key file '{}': {}", self.keyfile, e))?;
+        let content = std::fs::read_to_string(keyfile)
+            .map_err(|e| format!("Failed to read key file '{}': {}", keyfile, e))?;
         let config: KeyPairConfig = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse key file JSON: {}", e))?;
 
@@ -173,6 +175,16 @@ impl SqliteStorage {
             .map_err(|_| "Private key must be exactly 32 bytes".to_string())?;
 
         Ok(ed25519_dalek::SigningKey::from_bytes(&private_key_array))
+    }
+
+    /// Return the signing key, loading from disk on first use and caching.
+    pub(crate) fn load_signing_key(&self) -> Result<ed25519_dalek::SigningKey, String> {
+        if let Some(ref key) = *self.cached_signing_key.borrow() {
+            return Ok(key.clone());
+        }
+        let key = Self::load_signing_key_from_path(&self.keyfile)?;
+        *self.cached_signing_key.borrow_mut() = Some(key.clone());
+        Ok(key)
     }
 
     /// Compute the canonical SHA-256 hash for a decision (matches main.rs logic).

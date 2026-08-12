@@ -27,7 +27,8 @@ impl SqliteExecutorStorage {
         let conn = Connection::open(&self.db_path).map_err(|e| e.to_string())?;
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
-             PRAGMA synchronous = NORMAL;"
+             PRAGMA synchronous = NORMAL;
+             PRAGMA busy_timeout = 5000;"
         ).map_err(|e| e.to_string())?;
         Ok(conn)
     }
@@ -55,7 +56,7 @@ impl ExecutorStorage for SqliteExecutorStorage {
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .map_err(|e| format!("System time error: {e}"))?
             .as_millis() as u64;
 
         tx.execute(
@@ -80,7 +81,7 @@ impl ExecutorStorage for SqliteExecutorStorage {
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .map_err(|e| format!("System time error: {e}"))?
             .as_millis() as u64;
 
         let rows = tx
@@ -261,15 +262,17 @@ impl MediatedExecutor {
             "output": output
         });
 
-        let outcome_str = serde_json::to_string(&outcome).unwrap();
+        let canonical_outcome = crate::b2a::canonicalize(&outcome)
+            .map_err(|e| format!("Failed to canonicalize outcome: {e}"))?;
         let mut hasher = Sha256::new();
-        hasher.update(outcome_str.as_bytes());
+        hasher.update(canonical_outcome.as_bytes());
         let digest = hasher.finalize();
 
         let signature = self.keypair.sign(&digest);
         outcome["executor_signature"] = json!(hex::encode(signature.to_bytes()));
 
-        let final_outcome_str = serde_json::to_string(&outcome).unwrap();
+        let final_outcome_str = crate::b2a::canonicalize(&outcome)
+            .map_err(|e| format!("Failed to serialize final outcome: {e}"))?;
         self.storage
             .complete_consumption(authorization_id, &final_outcome_str)?;
 
