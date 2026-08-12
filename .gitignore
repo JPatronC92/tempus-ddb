@@ -1,4 +1,4 @@
-# Build artifacts
+# Build artifacts & binary outputs
 /target
 /build
 /dist
@@ -9,23 +9,31 @@
 *.so
 *.dll
 *.exe
+*.whl
 
-# Data / runtime files
+# Data & database files (SQLite databases, WAL, and SHM files)
 *.db
-*.json
-!pyproject.toml
-!package.json
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 server_secret.key
 keys.json
 agent_wallet.json
 tempus.db
+*.keys.json
+test_*.db
 
-# Python
+# Python & caches
 __pycache__/
 .pytest_cache/
+.ruff_cache/
 .venv*
 .env
 *.pyc
+
+# Logs
+*.log
 
 # Other
 tempus_sdk/

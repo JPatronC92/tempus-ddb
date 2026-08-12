@@ -213,7 +213,13 @@ def main():
         color_print(" Demo Finalizada Exitosamente (Todas las aserciones pasaron)", "32")
         print("================================================================\n")
 
+        del gate, proxy, api
+        import gc
+        gc.collect()
+
 if __name__ == "__main__":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     try:
         main()
     except AssertionError:

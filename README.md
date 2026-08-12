@@ -156,6 +156,64 @@ assert verification["phase"] == "COMPLETED"
 For remote transports, use `request_action_signed(...)` so the agent signs locally and
 never sends its private key or keyfile to Tempus.
 
+## Demos and Scenarios
+
+The repository includes runnable end-to-end demonstrations covering security guards, B2A flow, and tamper detection:
+
+### 1. Commercial Demo (`commercial_demo.py`)
+Demonstrates Phase 2 **Enforced Executor Mediation** and bypass prevention. An agent without a permit cannot access downstream APIs.
+```bash
+python commercial_demo.py
+```
+**Key checks performed:**
+- **Direct Bypass Attempt:** Rejected (agent lacks downstream API secret token).
+- **Authorized Execution:** Agent signs intent &rarr; Tempus Gate validates &rarr; Mediated Executor verifies permit &rarr; API executed.
+- **Replay Guard:** Re-using a consumed permit is rejected by the Executor.
+- **Expiry Guard:** Expired permits are rejected.
+- **Tamper Guard:** Altered permit fields invalidate the signature and are rejected.
+- **Cross-Tenant Guard:** Permits issued for a different tenant ID are blocked.
+- **Trace Verification:** Full cryptographic audit trace verification passes end-to-end.
+
+### 2. Decision Chain Scenario (`demo_scenario.py`)
+Simulates an autonomous bot lifecycle (Genesis &rarr; Decision 1 &rarr; Decision 2) with chain validation and JSON export:
+```bash
+python demo_scenario.py
+```
+
+### 3. CLI Tamper Detection (`tamper_demo_rust_cli.py`)
+Demonstrates tamper detection using the Rust CLI by simulating unauthorized modifications to recorded traces:
+```bash
+python tamper_demo_rust_cli.py
+```
+
+### 4. Code Examples (`examples/`)
+Additional standalone scripts in `examples/`:
+- `examples/basic_record.py`: Basic decision recording.
+- `examples/full_agent_flow.py`: Complete multi-agent authorization flow.
+- `examples/verify_chain.py`: Cryptographic chain verification.
+
+```bash
+python examples/full_agent_flow.py
+```
+
+## Performance Benchmarks
+
+Tempus DDB includes a benchmarking tool to evaluate transaction throughput and validation latency:
+
+```bash
+python benchmark.py --records 1000
+```
+
+To output machine-readable JSON:
+```bash
+python benchmark.py --records 1000 --json
+```
+
+**Optimizations active in v0.2.1+:**
+- SQLite Write-Ahead Logging (`WAL` mode) with `PRAGMA synchronous = NORMAL` and `busy_timeout = 5000`.
+- In-memory key caching to prevent disk I/O bottlenecks during hot-path transactions.
+- Max LTO release compilation (`opt-level = 3`, `lto = true`, `codegen-units = 1`).
+
 ## Stable contracts
 
 | Contract | Schema |

@@ -52,7 +52,14 @@ def run_benchmark(records: int, json_output: bool):
             print(f"🚀 Velocidad: {records / duracion:.2f} decisiones por segundo.")
             print(f"🔍 Tiempo de validación: {val_duracion:.2f} segundos (Válido: {is_valid}).")
 
+        del db
+        import gc
+        gc.collect()
+
 if __name__ == "__main__":
+    import sys
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Tempus DDB Benchmark")
     parser.add_argument("--records", type=int, default=1000, help="Number of records to benchmark")
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
