@@ -1,10 +1,10 @@
-import subprocess
 import json
-import sqlite3
-import time
 import os
-import tempfile
+import sqlite3
+import subprocess
 import sys
+import tempfile
+import time
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BIN_PATH = os.path.join(BASE_DIR, "target", "debug", "tempus-ddb.exe") if os.name == 'nt' else os.path.join(BASE_DIR, "target", "debug", "tempus-ddb")

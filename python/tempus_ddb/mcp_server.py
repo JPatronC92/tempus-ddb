@@ -1,10 +1,12 @@
 import asyncio
 import json
 import os
+
+from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-from dotenv import load_dotenv
+
 from ._tempus_ddb import TempusDDB, gen_keys
 
 load_dotenv()
@@ -338,7 +340,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     raise RuntimeError(f"TEMPUS_LEDGER_INTEGRITY_FAILURE: {output}")
             except Exception as e:
                 if "TEMPUS_LEDGER_INTEGRITY_FAILURE" not in str(e):
-                    raise RuntimeError(f"TEMPUS_LEDGER_INTEGRITY_FAILURE: {str(e)}")
+                    raise RuntimeError(f"TEMPUS_LEDGER_INTEGRITY_FAILURE: {e!s}")
                 raise
 
             return [TextContent(type="text", text=json.dumps({

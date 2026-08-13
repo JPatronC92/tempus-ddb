@@ -1,11 +1,13 @@
 import json
 import os
 import time
+
 import pytest
 
 # We import the built library
 # Make sure to run `python -m maturin build` and install it or run from the built extension
-from tempus_ddb import TempusDDB, gen_keys, TempusExecutor
+from tempus_ddb import TempusDDB, TempusExecutor, gen_keys
+
 
 class MockPurchasingAPI:
     """The protected downstream service that only trusts the executor."""

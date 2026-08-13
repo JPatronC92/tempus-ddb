@@ -1,9 +1,11 @@
 import json
-import time
 import os
-import tempfile
 import sys
-from tempus_ddb import TempusDDB, gen_keys, TempusExecutor
+import tempfile
+import time
+
+from tempus_ddb import TempusDDB, TempusExecutor, gen_keys
+
 
 class DownstreamAPI:
     """A simulated protected downstream API that only trusts Tempus permits."""

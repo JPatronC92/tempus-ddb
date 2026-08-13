@@ -2,7 +2,6 @@ import json
 import time
 
 import pytest
-
 import tempus_ddb.mcp_server as mcp_module
 from tempus_ddb.mcp_server import call_tool, list_tools, validate_path
 

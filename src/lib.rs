@@ -14,6 +14,11 @@ mod b2a;
 // --- 1. PATRÓN STORAGE LAYER (TRAIT) ---
 pub trait StorageLayer {
     fn insert_decision(&mut self, payload: &str, rules: &str, genesis: bool) -> Result<(), String>;
+    fn insert_decision_batch(
+        &mut self,
+        decisions: Vec<(&str, &str)>,
+        genesis: bool,
+    ) -> Result<(), String>;
     fn get_latest_hash(&self) -> Result<String, String>;
     fn export_ledger(&self) -> Result<String, String>;
     fn list_decisions(&self, limit: u32, offset: u32) -> Result<String, String>;
@@ -50,6 +55,19 @@ impl StorageLayer for MemoryStorage {
             self.latest_hash = "GENESIS_HASH_MEM".to_string();
         } else {
             self.latest_hash = "NEW_HASH_MEM".to_string(); // Simulación de nuevo hash
+        }
+        Ok(())
+    }
+
+    fn insert_decision_batch(
+        &mut self,
+        decisions: Vec<(&str, &str)>,
+        genesis: bool,
+    ) -> Result<(), String> {
+        let mut is_first = true;
+        for (payload, rules) in decisions {
+            self.insert_decision(payload, rules, genesis && is_first)?;
+            is_first = false;
         }
         Ok(())
     }
@@ -115,12 +133,13 @@ impl SqliteStorage {
     pub fn new(db_path: String, keyfile: String) -> Result<Self, String> {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open SQLite database '{}': {}", db_path, e))?;
-            
+
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
-             PRAGMA busy_timeout = 5000;"
-        ).map_err(|e| e.to_string())?;
+             PRAGMA busy_timeout = 5000;",
+        )
+        .map_err(|e| e.to_string())?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS decisions (
@@ -151,7 +170,11 @@ impl SqliteStorage {
 
         b2a::initialize_schema(&conn)?;
 
-        Ok(Self { conn, keyfile, cached_signing_key: std::cell::RefCell::new(None) })
+        Ok(Self {
+            conn,
+            keyfile,
+            cached_signing_key: std::cell::RefCell::new(None),
+        })
     }
 
     /// Load an Ed25519 signing key from a file path.
@@ -634,6 +657,108 @@ impl StorageLayer for SqliteStorage {
         Ok(())
     }
 
+    fn insert_decision_batch(
+        &mut self,
+        decisions: Vec<(&str, &str)>,
+        genesis: bool,
+    ) -> Result<(), String> {
+        if decisions.is_empty() {
+            return Ok(());
+        }
+
+        let signing_key = self.load_signing_key()?;
+        let verifying_key = signing_key.verifying_key();
+        let actor_id = hex::encode(verifying_key.to_bytes());
+
+        let tx = self
+            .conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+
+        let mut current_parent_id;
+        let mut current_causal_depth;
+
+        match Self::get_last_decision_conn(&tx)? {
+            Some(last_d) => {
+                if genesis {
+                    current_parent_id = "genesis".to_string();
+                    current_causal_depth = 0u64;
+                } else {
+                    current_parent_id = last_d.id;
+                    current_causal_depth = last_d.causal_depth + 1;
+                }
+            }
+            None => {
+                if genesis {
+                    current_parent_id = "genesis".to_string();
+                    current_causal_depth = 0u64;
+                } else {
+                    return Err(
+                        "Database is empty. Use genesis=true to record the first decision."
+                            .to_string(),
+                    );
+                }
+            }
+        };
+
+        if current_parent_id == "genesis" {
+            let mut stmt = tx
+                .prepare("SELECT 1 FROM decisions WHERE parent_id = 'genesis' LIMIT 1")
+                .map_err(|e| format!("Prepare error: {}", e))?;
+            let exists = stmt.exists([]).map_err(|e| format!("Query error: {}", e))?;
+            if exists {
+                return Err("A genesis decision already exists in the database.".to_string());
+            }
+        }
+
+        for (payload, rules) in decisions {
+            serde_json::from_str::<serde_json::Value>(payload)
+                .map_err(|e| format!("Payload is not valid JSON: {}", e))?;
+            serde_json::from_str::<serde_json::Value>(rules)
+                .map_err(|e| format!("Rules is not valid JSON: {}", e))?;
+
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .map_err(|e| format!("System time error: {}", e))?
+                .as_micros() as u64;
+
+            let hash_bytes = Self::calculate_canonical_hash(
+                &current_parent_id,
+                &actor_id,
+                timestamp,
+                payload,
+                rules,
+            )?;
+            let id = hex::encode(hash_bytes);
+
+            let signature_struct = signing_key.sign(&hash_bytes);
+            let signature = hex::encode(signature_struct.to_bytes());
+
+            tx.execute(
+                "INSERT INTO decisions (id, parent_id, causal_depth, actor_id, timestamp, payload, rules_evaluated, signature)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                (
+                    &id,
+                    &current_parent_id,
+                    current_causal_depth,
+                    &actor_id,
+                    timestamp,
+                    payload,
+                    rules,
+                    &signature,
+                ),
+            ).map_err(|e| format!("Failed to insert decision into SQLite: {}", e))?;
+
+            current_parent_id = id;
+            current_causal_depth += 1;
+        }
+
+        tx.commit()
+            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+
+        Ok(())
+    }
+
     fn get_latest_hash(&self) -> Result<String, String> {
         let mut stmt = self
             .conn
@@ -770,6 +895,28 @@ impl TempusDDB {
 
         let result_json = format!(
             r#"{{"status": "success", "action": "recorded", "latest_hash": "{}"}}"#,
+            self.storage.get_latest_hash().unwrap_or_default()
+        );
+        Ok(result_json)
+    }
+
+    #[allow(unused_variables)]
+    #[pyo3(signature = (decisions, genesis=false))]
+    fn record_batch(
+        &mut self,
+        decisions: Vec<(String, String)>,
+        genesis: bool,
+    ) -> PyResult<String> {
+        let refs: Vec<(&str, &str)> = decisions
+            .iter()
+            .map(|(p, r)| (p.as_str(), r.as_str()))
+            .collect();
+        self.storage
+            .insert_decision_batch(refs, genesis)
+            .map_err(PyPermissionError::new_err)?;
+
+        let result_json = format!(
+            r#"{{"status": "success", "action": "recorded_batch", "latest_hash": "{}"}}"#,
             self.storage.get_latest_hash().unwrap_or_default()
         );
         Ok(result_json)
@@ -1023,10 +1170,20 @@ pub struct TempusExecutor {
 #[pymethods]
 impl TempusExecutor {
     #[new]
-    pub fn new(db_path: String, keyfile: String, trusted_gate_id: String, trusted_tenant_id: String) -> PyResult<Self> {
+    pub fn new(
+        db_path: String,
+        keyfile: String,
+        trusted_gate_id: String,
+        trusted_tenant_id: String,
+    ) -> PyResult<Self> {
         let storage = SqliteExecutorStorage::new(&db_path);
-        let inner =
-            MediatedExecutor::new(Box::new(storage), &keyfile, &trusted_gate_id, &trusted_tenant_id).map_err(PyRuntimeError::new_err)?;
+        let inner = MediatedExecutor::new(
+            Box::new(storage),
+            &keyfile,
+            &trusted_gate_id,
+            &trusted_tenant_id,
+        )
+        .map_err(PyRuntimeError::new_err)?;
         Ok(Self { inner })
     }
 

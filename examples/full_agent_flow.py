@@ -6,7 +6,6 @@ import time
 
 from tempus_ddb import TempusDDB, gen_keys
 
-
 DB = "agent_flow.db"
 GATE_KEYS = "agent_flow_gate.keys.json"
 AGENT_KEYS = "agent_flow_agent.keys.json"

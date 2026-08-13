@@ -1,8 +1,9 @@
 import json
 import sqlite3
-import pytest
 
+import pytest
 from tempus_ddb import TempusDDB, gen_keys
+
 
 def test_tamper_delete_middle_record(tmp_path):
     """Test that deleting a record from the middle of the chain breaks validation."""

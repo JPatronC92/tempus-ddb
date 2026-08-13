@@ -5,9 +5,10 @@ This matches the examples shown in the README.
 Run with: python examples/basic_record.py
 """
 
-from tempus_ddb import TempusDDB, gen_keys
 import json
 import os
+
+from tempus_ddb import TempusDDB, gen_keys
 
 DB_PATH = "examples_tempus.db"
 KEY_PATH = "examples_keys.json"
