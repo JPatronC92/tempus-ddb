@@ -5,8 +5,9 @@ This demonstrates the tamper-evident audit trail capability.
 """
 
 import json
-from tempus_ddb import TempusDDB, gen_keys
 import os
+
+from tempus_ddb import TempusDDB, gen_keys
 
 DB = "verify_example.db"
 KEYS = "verify_example_keys.json"

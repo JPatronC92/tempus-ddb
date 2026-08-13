@@ -11,8 +11,8 @@ Run with:
 import json
 import sqlite3
 import time
-import pytest
 
+import pytest
 from tempus_ddb import TempusDDB, gen_keys
 
 

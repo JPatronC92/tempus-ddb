@@ -1,10 +1,12 @@
-import time
-import os
-import json
 import argparse
+import json
+import os
 import tempfile
-from tempus_ddb import TempusDDB
+import time
+
 import tempus_ddb
+from tempus_ddb import TempusDDB
+
 
 def run_benchmark(records: int, json_output: bool):
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -19,10 +21,13 @@ def run_benchmark(records: int, json_output: bool):
         
         start_time = time.time()
 
+        batch = []
         for i in range(records):
             payload = json.dumps({"accion": "lectura", "sensor": i})
             rules = json.dumps({"limite": 100})
-            db.record(payload, rules, genesis=(i == 0))
+            batch.append((payload, rules))
+
+        db.record_batch(batch, genesis=True)
 
         end_time = time.time()
         

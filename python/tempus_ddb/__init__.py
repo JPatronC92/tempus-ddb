@@ -17,7 +17,7 @@ Typical usage:
     db.record(payload, rules, genesis=True)
 """
 
-from ._tempus_ddb import TempusDDB, gen_keys, TempusExecutor
+from ._tempus_ddb import TempusDDB, TempusExecutor, gen_keys
 from .mcp_server import main_sync
 
-__all__ = ["TempusDDB", "gen_keys", "TempusExecutor", "main_sync"]
+__all__ = ["TempusDDB", "TempusExecutor", "gen_keys", "main_sync"]

@@ -1,5 +1,6 @@
 import os
-from web3 import Web3, AsyncWeb3
+
+from web3 import AsyncWeb3, Web3
 
 NETWORKS = {
     "base-sepolia": "https://sepolia.base.org"
@@ -29,7 +30,7 @@ class Web3PaymentAdapter:
             tx = await w3.eth.get_transaction(tx_hash)
             receipt = await w3.eth.get_transaction_receipt(tx_hash)
         except Exception as e:
-            raise ValueError(f"TEMPUS_TX_VERIFICATION_FAILED: Could not fetch transaction. {str(e)}")
+            raise ValueError(f"TEMPUS_TX_VERIFICATION_FAILED: Could not fetch transaction. {e!s}")
 
         if receipt["status"] != 1:
             raise ValueError("TEMPUS_TX_FAILED: Transaction reverted on-chain.")

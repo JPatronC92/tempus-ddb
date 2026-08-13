@@ -6,11 +6,12 @@ Run with: pytest tests/test_cli.py -v  (after `pip install -e .`)
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
-import sqlite3
 import time
 from pathlib import Path
+
 
 def run_cli(args, cwd=None):
     """Run the tempus CLI and return (returncode, stdout, stderr)."""

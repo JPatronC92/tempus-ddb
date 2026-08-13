@@ -1,10 +1,11 @@
 import argparse
-import sys
-import os
-import json
-from .mcp_server import main_sync
-from ._tempus_ddb import TempusDDB, gen_keys
 import importlib.metadata
+import json
+import os
+import sys
+
+from ._tempus_ddb import TempusDDB, gen_keys
+from .mcp_server import main_sync
 
 try:
     __version__ = importlib.metadata.version("tempus_ddb")

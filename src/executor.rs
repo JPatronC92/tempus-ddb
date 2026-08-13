@@ -28,8 +28,9 @@ impl SqliteExecutorStorage {
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
-             PRAGMA busy_timeout = 5000;"
-        ).map_err(|e| e.to_string())?;
+             PRAGMA busy_timeout = 5000;",
+        )
+        .map_err(|e| e.to_string())?;
         Ok(conn)
     }
 }

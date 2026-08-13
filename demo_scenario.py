@@ -1,9 +1,11 @@
 import json
-import time
 import os
 import tempfile
-from tempus_ddb import TempusDDB
+import time
+
 import tempus_ddb
+from tempus_ddb import TempusDDB
+
 
 def main():
     print("🚀 Iniciando prueba de la Decision Database (Tempus DDB)...\n")

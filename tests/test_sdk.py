@@ -1,6 +1,7 @@
 import json
-from tempus_ddb import TempusDDB
+
 import tempus_ddb
+from tempus_ddb import TempusDDB
 
 
 def test_sdk_basic_workflow(tmp_path):
