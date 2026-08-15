@@ -558,6 +558,15 @@ impl SqliteStorage {
         b2a::commit_outcome(self, authorization_id, outcome, executor_keyfile)
     }
 
+    /// Consume an allowed permit exactly once with an already signed outcome.
+    pub fn commit_outcome_signed(
+        &self,
+        authorization_id: &str,
+        outcome: &str,
+    ) -> Result<String, String> {
+        b2a::commit_outcome_signed(self, authorization_id, outcome)
+    }
+
     /// Return the authorization and optional execution receipt for an action.
     pub fn get_trace(&self, action_id: &str) -> Result<String, String> {
         b2a::get_trace(self, action_id)
@@ -1012,6 +1021,13 @@ impl TempusDDB {
     ) -> PyResult<String> {
         self.storage
             .commit_outcome(authorization_id, outcome, executor_keyfile)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (authorization_id, outcome))]
+    fn commit_outcome_signed(&self, authorization_id: &str, outcome: &str) -> PyResult<String> {
+        self.storage
+            .commit_outcome_signed(authorization_id, outcome)
             .map_err(PyRuntimeError::new_err)
     }
 

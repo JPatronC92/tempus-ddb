@@ -193,10 +193,9 @@ def main():
         color_print(f"PASS cross-tenant permit rejected: {outcome_cross['error']}", "32")
 
         print_step("7", "Se genera un receipt verificable")
-        receipt_str = gate.commit_outcome(
+        receipt_str = gate.commit_outcome_signed(
             auth_result['authorization']['authorization_id'],
             json.dumps(outcome_success),
-            exec_keyfile
         )
         receipt = json.loads(receipt_str)
         assert receipt["schema_version"] == "tempus.execution-result.v1"

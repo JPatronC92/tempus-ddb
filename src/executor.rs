@@ -265,11 +265,8 @@ impl MediatedExecutor {
 
         let canonical_outcome = crate::b2a::canonicalize(&outcome)
             .map_err(|e| format!("Failed to canonicalize outcome: {e}"))?;
-        let mut hasher = Sha256::new();
-        hasher.update(canonical_outcome.as_bytes());
-        let digest = hasher.finalize();
 
-        let signature = self.keypair.sign(&digest);
+        let signature = self.keypair.sign(canonical_outcome.as_bytes());
         outcome["executor_signature"] = json!(hex::encode(signature.to_bytes()));
 
         let final_outcome_str = crate::b2a::canonicalize(&outcome)
