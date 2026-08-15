@@ -841,6 +841,40 @@ pub(crate) fn commit_outcome(
     outcome: &str,
     executor_keyfile: &str,
 ) -> Result<String, String> {
+    let executor_key = load_signing_key(executor_keyfile)?;
+    let executor_id = hex::encode(executor_key.verifying_key().to_bytes());
+
+    let mut outcome_value: Value =
+        serde_json::from_str(outcome).map_err(|e| format!("outcome must be valid JSON: {e}"))?;
+    if let Some(obj) = outcome_value.as_object_mut() {
+        obj.insert(
+            "executor_id".to_string(),
+            Value::String(executor_id.clone()),
+        );
+    }
+    let canonical_outcome_for_sign = canonicalize(&outcome_value)?;
+    let executor_signature = hex::encode(
+        executor_key
+            .sign(canonical_outcome_for_sign.as_bytes())
+            .to_bytes(),
+    );
+
+    if let Some(obj) = outcome_value.as_object_mut() {
+        obj.insert(
+            "executor_signature".to_string(),
+            Value::String(executor_signature),
+        );
+    }
+    let signed_outcome = canonicalize(&outcome_value)?;
+
+    commit_outcome_signed(storage, authorization_id, &signed_outcome)
+}
+
+pub(crate) fn commit_outcome_signed(
+    storage: &SqliteStorage,
+    authorization_id: &str,
+    outcome: &str,
+) -> Result<String, String> {
     let authorization_json: String = storage
         .conn
         .query_row(
@@ -871,8 +905,23 @@ pub(crate) fn commit_outcome(
         return Err("TEMPUS_PERMIT_EXPIRED".to_string());
     }
     let action_id = string_field(authorization, "action_id")?;
-    let (outcome_value, canonical_outcome) = parse_canonical(outcome, "outcome")?;
-    let outcome_status = validate_outcome(&outcome_value, authorization_id, &action_id)?;
+
+    let (outcome_value, _) = parse_canonical(outcome, "outcome")?;
+    let executor_signature = outcome_value
+        .get("executor_signature")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            "TEMPUS_OUTCOME_MISSING_SIGNATURE: outcome must have an executor_signature".to_string()
+        })?
+        .to_string();
+
+    let mut outcome_for_hash = outcome_value.clone();
+    if let Some(obj) = outcome_for_hash.as_object_mut() {
+        obj.remove("executor_signature");
+    }
+    let canonical_outcome = canonicalize(&outcome_for_hash)?;
+
+    let outcome_status = validate_outcome(&outcome_for_hash, authorization_id, &action_id)?;
     let outcome_hash = sha256_hex(canonical_outcome.as_bytes());
 
     let existing = storage
@@ -902,15 +951,21 @@ pub(crate) fn commit_outcome(
         );
     }
 
-    let executor_key = load_signing_key(executor_keyfile)?;
-    let executor_id = hex::encode(executor_key.verifying_key().to_bytes());
+    let executor_id = string_field(&outcome_for_hash, "executor_id")?;
     let executor = verify_agent_state(&storage.conn, &executor_id)?
         .ok_or_else(|| "TEMPUS_EXECUTOR_NOT_REGISTERED".to_string())?;
     if !executor.active {
         return Err("TEMPUS_EXECUTOR_NOT_ACTIVE".to_string());
     }
-    let executor_signature =
-        hex::encode(executor_key.sign(canonical_outcome.as_bytes()).to_bytes());
+
+    if !verify_message_signature(
+        &executor_id,
+        canonical_outcome.as_bytes(),
+        &executor_signature,
+    ) {
+        return Err("TEMPUS_EXECUTOR_SIGNATURE_INVALID".to_string());
+    }
+
     let (gate_key, gate_id) = gate_identity(storage)?;
     let completed_at = now_micros()?;
     let body = json!({
@@ -939,7 +994,6 @@ pub(crate) fn commit_outcome(
         "schema_version": EXECUTION_RESULT_SCHEMA,
         "receipt": receipt,
         "outcome": outcome_value,
-        "executor_signature": executor_signature,
     });
     let execution_json = canonicalize(&result)?;
     storage
@@ -1024,14 +1078,25 @@ fn verify_execution(
         errors.push("OUTCOME_MISSING".to_string());
         return errors;
     };
-    let canonical_outcome = match canonicalize(outcome) {
+
+    let mut outcome_for_hash = outcome.clone();
+    let executor_signature = if let Some(obj) = outcome_for_hash.as_object_mut() {
+        obj.remove("executor_signature")
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let canonical_outcome_for_hash = match canonicalize(&outcome_for_hash) {
         Ok(value) => value,
         Err(error) => {
             errors.push(error);
             return errors;
         }
     };
-    if sha256_hex(canonical_outcome.as_bytes())
+
+    if sha256_hex(canonical_outcome_for_hash.as_bytes())
         != receipt
             .get("outcome_hash")
             .and_then(Value::as_str)
@@ -1039,18 +1104,16 @@ fn verify_execution(
     {
         errors.push("OUTCOME_HASH_MISMATCH".to_string());
     }
+
     let executor_id = receipt
         .get("executor_id")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let executor_signature = execution
-        .get("executor_signature")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+
     if !verify_message_signature(
         executor_id,
-        canonical_outcome.as_bytes(),
-        executor_signature,
+        canonical_outcome_for_hash.as_bytes(),
+        &executor_signature,
     ) {
         errors.push("EXECUTOR_SIGNATURE_INVALID".to_string());
     }
