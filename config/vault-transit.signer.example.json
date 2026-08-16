@@ -1,0 +1,11 @@
+{
+  "schema_version": "tempus.signer-config.v1",
+  "provider": "vault-transit-cli",
+  "signer_uri": "vault-transit://transit/tempus-gate",
+  "key_version": "1",
+  "algorithm": "Ed25519",
+  "public_key": "REPLACE_WITH_64_HEX_CHARACTER_ED25519_PUBLIC_KEY",
+  "vault_binary": "vault",
+  "timeout_ms": 5000,
+  "max_attempts": 2
+}

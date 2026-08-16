@@ -1,0 +1,21 @@
+{
+  "schema_version": "tempus.adapter-conformance.v1",
+  "permit_schema": "tempus.authorization-result.v1",
+  "outcome_schema": "tempus.action-outcome.v1",
+  "policy_schema": "tempus.policy-bundle.v1",
+  "required_fail_closed_checks": [
+    "schema",
+    "gate_signature",
+    "tenant",
+    "intent_hash",
+    "policy_digest",
+    "evidence_digest",
+    "executor_constraints",
+    "expiry",
+    "replay"
+  ],
+  "unknown_signer": "REJECT",
+  "unknown_algorithm": "REJECT",
+  "unknown_policy": "REJECT",
+  "single_consumption": true
+}

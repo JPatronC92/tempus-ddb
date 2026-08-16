@@ -4,10 +4,11 @@
 
 | Version | Status |
 |---|---|
-| `0.3.x` | Current public-alpha line |
+| `0.4.x` | Current design-partner beta line |
+| `0.3.x` | Critical fixes only until `0.5.0` |
 | `< 0.3` | Security fixes are not guaranteed |
 
-Until `0.3.0` is released, the current source tree is the only supported candidate.
+Until `0.4.0` is released, the current source tree is the supported beta candidate.
 
 ## Reporting a Vulnerability
 
@@ -24,8 +25,10 @@ privately.
 
 - The project is local-first. The SQLite databases are tamper-evident, not encrypted, and
   not independently protected against full deletion or rollback.
-- Plaintext keyfiles are supported for local evaluation only. Production remote signers,
-  rotation, and revocation are Phase 3 work.
+- Plaintext keyfiles are supported for local evaluation only. Production gate and executor
+  processes should use the Vault Transit signer configuration and short-lived workload
+  authentication. Signed rotation and revocation are implemented, but operators must
+  distribute revocation state before relying on multiple executor instances.
 - The GitHub executor is a single-instance adapter for issue and pull-request creation.
   Its token must exist only in the executor environment; an agent with the same token can
   bypass Tempus.

@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Phase 3
+
+- A provider-neutral Rust signer boundary and verification-key resolver with compatible
+  local Ed25519 and Vault Transit CLI backends. Signer URI, key version, and algorithm are
+  bound into signed artifacts; unknown providers, algorithms, versions, and malformed
+  responses fail closed.
+- Signed deterministic policy bundles covering tenant, action type, resource, input size,
+  optional money constraints, TTL, and allowed executors. Permits now bind the policy
+  digest, reproducible evidence digest, executor constraints, and complete reason codes.
+- Tenant-scoped identity delegation plus signed rotation and revocation events. Historical
+  receipts resolve the key valid at signing time, while emergency revocation invalidates
+  unconsumed permits.
+- `tempus doctor`, policy and identity lifecycle commands, signer conformance checks, and
+  a machine-readable adapter conformance fixture.
+- SPDX 2.3 SBOM generation and GitHub artifact provenance/SBOM attestations in the release
+  workflow, plus a compatibility policy and Vault Transit operating guide.
+- Package maturity advances to design-partner beta (`0.4.0`). Existing v1 schema names
+  remain compatible; the Phase 3 binding fields are additive and enforced by executors.
+
+Hosted GitHub Actions and live credentialed Vault/GitHub checks remain deferred until the
+repository billing restriction is resolved; neither is silently treated as passing.
+
 ### Added
 
 - First complete local B2A authorization flow: signed action intent, gate permit,

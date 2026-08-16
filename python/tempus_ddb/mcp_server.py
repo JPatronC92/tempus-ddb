@@ -127,6 +127,24 @@ async def list_tools() -> list[Tool]:
                 "required": ["db"],
             },
         ),
+        Tool(
+            name="tempus_list_policies",
+            description="Read active and retired signed deterministic policies.",
+            inputSchema={
+                "type": "object",
+                "properties": {"db": {"type": "string"}},
+                "required": ["db"],
+            },
+        ),
+        Tool(
+            name="tempus_list_identity_events",
+            description="Read signed identity rotation and revocation events.",
+            inputSchema={
+                "type": "object",
+                "properties": {"db": {"type": "string"}},
+                "required": ["db"],
+            },
+        ),
     ]
     if TEMPUS_LOCAL_KEYFILE_TOOLS:
         tools.extend([
@@ -483,6 +501,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "db_path": db_path,
                 "agents": json.loads(output) if isinstance(output, str) else output
             }, indent=2))]
+
+        elif name == "tempus_list_policies":
+            output = _gate_db(arguments).list_policies()
+            return [TextContent(type="text", text=output)]
+
+        elif name == "tempus_list_identity_events":
+            output = _gate_db(arguments).list_identity_events()
+            return [TextContent(type="text", text=output)]
 
         elif name == "tempus_whoami":
             db_path = validate_path(arguments.get("db", "tempus.db"))

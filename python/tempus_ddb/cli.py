@@ -2,7 +2,10 @@ import argparse
 import importlib.metadata
 import json
 import os
+import shutil
+import stat
 import sys
+import time
 
 from ._tempus_ddb import TempusDDB, gen_keys
 from .mcp_server import main_sync
@@ -410,6 +413,177 @@ def run_trace(args, *, verify=False):
         print(f"✗ Trace {'verification' if verify else 'lookup'} failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
+
+def _gate(args):
+    db_path, keyfile = _resolve_paths(args)
+    return TempusDDB(db_path, keyfile)
+
+
+def run_install_policy(args):
+    """Install a signed deterministic policy and make it active for its tenant."""
+    try:
+        spec = _load_json_argument(args.policy, "policy")
+        print(json.dumps(json.loads(_gate(args).install_policy(spec)), indent=2))
+    except Exception as exc:
+        print(f"✗ Policy installation failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_list_policies(args):
+    try:
+        print(json.dumps(json.loads(_gate(args).list_policies()), indent=2))
+    except Exception as exc:
+        print(f"✗ Policy listing failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_rotate_agent(args):
+    try:
+        with open(args.new_keyfile, encoding="utf-8") as handle:
+            new_public_key = json.load(handle)["public_key"]
+        result = _gate(args).rotate_agent(args.current_public_key, new_public_key)
+        print(json.dumps(json.loads(result), indent=2))
+    except Exception as exc:
+        print(f"✗ Identity rotation failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_revoke_agent(args):
+    try:
+        result = _gate(args).revoke_agent(args.public_key, args.reason)
+        print(json.dumps(json.loads(result), indent=2))
+    except Exception as exc:
+        print(f"✗ Identity revocation failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_identity_events(args):
+    try:
+        result = _gate(args).list_identity_events()
+        print(json.dumps(json.loads(result), indent=2))
+    except Exception as exc:
+        print(f"✗ Identity event listing failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def run_conformance(args):
+    """Emit the adapter contract and optionally exercise the configured signer."""
+    manifest = {
+        "schema_version": "tempus.adapter-conformance.v1",
+        "status": "PASS",
+        "contracts": {
+            "permit": "tempus.authorization-result.v1",
+            "outcome": "tempus.action-outcome.v1",
+            "policy": "tempus.policy-bundle.v1",
+            "single_consumption": True,
+            "fail_closed_checks": [
+                "schema",
+                "gate_signature",
+                "tenant",
+                "intent_hash",
+                "policy_digest",
+                "evidence_digest",
+                "executor_constraints",
+                "expiry",
+                "replay",
+            ],
+        },
+    }
+    if args.signer:
+        try:
+            manifest["signer"] = json.loads(_gate(args).signer_conformance())
+        except Exception as exc:
+            manifest["status"] = "FAIL"
+            manifest["signer"] = {"status": "FAIL", "error": str(exc)}
+    print(json.dumps(manifest, indent=2))
+    if manifest["status"] != "PASS":
+        sys.exit(1)
+
+
+def run_doctor(args):
+    """Check whether the local gate is ready without exposing credential material."""
+    db_path, keyfile = _resolve_paths(args)
+    checks = []
+
+    def add(name, status, detail):
+        checks.append({"name": name, "status": status, "detail": detail})
+
+    if os.path.isfile(keyfile) and os.access(keyfile, os.R_OK):
+        add("signer_config", "PASS", f"readable: {keyfile}")
+        if os.name != "nt":
+            mode = stat.S_IMODE(os.stat(keyfile).st_mode)
+            add(
+                "signer_permissions",
+                "PASS" if mode & 0o077 == 0 else "FAIL",
+                oct(mode),
+            )
+        try:
+            with open(keyfile, encoding="utf-8") as handle:
+                signer_config = json.load(handle)
+            if signer_config.get("provider") == "vault-transit-cli":
+                vault_binary = signer_config.get("vault_binary", "vault")
+                resolved = shutil.which(vault_binary)
+                add(
+                    "vault_cli",
+                    "PASS" if resolved else "FAIL",
+                    resolved or f"not found: {vault_binary}",
+                )
+        except (OSError, ValueError) as exc:
+            add("signer_json", "FAIL", str(exc))
+    else:
+        add("signer_config", "FAIL", f"not readable: {keyfile}")
+
+    now = time.time()
+    add(
+        "clock",
+        "PASS" if now > 1_700_000_000 else "FAIL",
+        f"unix_seconds={int(now)}",
+    )
+    if not os.path.isfile(db_path):
+        add("database", "FAIL", f"not found: {db_path}")
+    else:
+        try:
+            gate = TempusDDB(db_path, keyfile)
+            identity = json.loads(gate.whoami())
+            add("database", "PASS", f"open: {db_path}")
+            trusted = gate.verify_agent(identity["public_key"])
+            add(
+                "gate_identity",
+                "PASS" if trusted else "FAIL",
+                identity["public_key"],
+            )
+            policies = json.loads(gate.list_policies())
+            active = [policy for policy in policies if policy.get("status") == "ACTIVE"]
+            add(
+                "active_policy",
+                "PASS" if active else "FAIL",
+                f"active={len(active)}",
+            )
+        except Exception as exc:
+            add("database", "FAIL", str(exc))
+    if args.github:
+        add(
+            "github_executor_credentials",
+            "PASS" if os.environ.get("GITHUB_TOKEN") else "FAIL",
+            "GITHUB_TOKEN is set" if os.environ.get("GITHUB_TOKEN") else "GITHUB_TOKEN is missing",
+        )
+
+    overall = "FAIL" if any(check["status"] == "FAIL" for check in checks) else "PASS"
+    report = {
+        "schema_version": "tempus.doctor-result.v1",
+        "status": overall,
+        "version": __version__,
+        "checks": checks,
+    }
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"Tempus doctor: {overall}")
+        for check in checks:
+            print(f"[{check['status']}] {check['name']}: {check['detail']}")
+    if overall != "PASS":
+        sys.exit(1)
+
 def run_version():
     print(f"tempus {__version__}")
 
@@ -483,6 +657,32 @@ def main():
     # whoami
     subparsers.add_parser("whoami", help="Show the identity of the current keyfile")
 
+    install_policy_p = subparsers.add_parser(
+        "install-policy", help="Sign and activate a deterministic policy bundle"
+    )
+    install_policy_p.add_argument("--policy", required=True, help="Policy JSON or file")
+    subparsers.add_parser("list-policies", help="List active and retired signed policies")
+
+    rotate_p = subparsers.add_parser("rotate-agent", help="Rotate an active identity key")
+    rotate_p.add_argument("--current-public-key", required=True)
+    rotate_p.add_argument("--new-keyfile", required=True)
+    revoke_p = subparsers.add_parser("revoke-agent", help="Revoke an identity key and open permits")
+    revoke_p.add_argument("--public-key", required=True)
+    revoke_p.add_argument("--reason", required=True)
+    subparsers.add_parser("identity-events", help="List signed rotation and revocation events")
+
+    conformance_p = subparsers.add_parser(
+        "conformance", help="Emit machine-readable adapter conformance requirements"
+    )
+    conformance_p.add_argument(
+        "--signer", action="store_true", help="Also exercise the configured signing provider"
+    )
+    doctor_p = subparsers.add_parser("doctor", help="Check production configuration readiness")
+    doctor_p.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    doctor_p.add_argument(
+        "--github", action="store_true", help="Also check GitHub executor credentials"
+    )
+
     # B2A execution-gate workflow
     request_p = subparsers.add_parser(
         "request-action",
@@ -536,6 +736,20 @@ def main():
             run_list_agents(args)
         elif args.command == "whoami":
             run_whoami(args)
+        elif args.command == "install-policy":
+            run_install_policy(args)
+        elif args.command == "list-policies":
+            run_list_policies(args)
+        elif args.command == "rotate-agent":
+            run_rotate_agent(args)
+        elif args.command == "revoke-agent":
+            run_revoke_agent(args)
+        elif args.command == "identity-events":
+            run_identity_events(args)
+        elif args.command == "conformance":
+            run_conformance(args)
+        elif args.command == "doctor":
+            run_doctor(args)
         elif args.command == "request-action":
             run_request_action(args)
         elif args.command == "commit-outcome":

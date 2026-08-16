@@ -62,7 +62,11 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      attestations: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
@@ -72,12 +76,33 @@ jobs:
         with:
           name: sdist
           path: dist
+      - name: Generate SPDX SBOM
+        run: >-
+          python scripts/generate_sbom.py
+          --version "${{ github.event.release.tag_name }}"
+          --output "sbom/tempus-ddb-${{ github.event.release.tag_name }}.spdx.json"
+      - name: Attest release provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*
+      - name: Attest release SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*
+          sbom-path: sbom/tempus-ddb-${{ github.event.release.tag_name }}.spdx.json
       - name: Upload to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: dist/*
           file_glob: true
+          tag: ${{ github.event.release.tag_name }}
+          overwrite: true
+      - name: Upload SBOM to GitHub Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: sbom/tempus-ddb-${{ github.event.release.tag_name }}.spdx.json
           tag: ${{ github.event.release.tag_name }}
           overwrite: true
 
