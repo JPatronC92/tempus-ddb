@@ -14,7 +14,7 @@ Fixes # (issue)
 
 ## Checklist
 
-- [ ] I have read the [CONTRIBUTING.md](CONTRIBUTING.md)
+- [ ] I have read [CONTRIBUTING.md](../CONTRIBUTING.md)
 - [ ] My code follows the style guidelines
 - [ ] I have added tests that prove my fix/feature works
 - [ ] New and existing unit tests pass locally

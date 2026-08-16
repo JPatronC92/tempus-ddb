@@ -15,12 +15,8 @@ EXAMPLES = [
 
 def test_examples_run_successfully(tmp_path):
     env = os.environ.copy()
-    python_path = str(REPO_ROOT / "python")
-    env["PYTHONPATH"] = (
-        python_path
-        if not env.get("PYTHONPATH")
-        else f"{python_path}{os.pathsep}{env['PYTHONPATH']}"
-    )
+    # Exercise the installed wheel/editable package. Prepending the source directory
+    # hides the compiled extension and does not represent an installed product.
     env["PYTHONIOENCODING"] = "utf-8"
 
     for example in EXAMPLES:

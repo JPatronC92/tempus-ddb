@@ -1,6 +1,6 @@
 import json
-import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -51,25 +51,24 @@ class ExecutorProxy:
         except Exception as e:
             return {"error": str(e)}
 
-def setup_test_env():
-    gate_db = "test_gate.db"
-    exec_db = "test_executor.db"
-    if os.path.exists(gate_db):
-        os.remove(gate_db)
-    if os.path.exists(exec_db):
-        os.remove(exec_db)
+def setup_test_env(tmp_path: Path):
+    gate_db = tmp_path / "gate.db"
+    exec_db = tmp_path / "executor.db"
+    gate_keyfile = tmp_path / "gate.keys.json"
+    agent_keyfile = tmp_path / "agent.keys.json"
+    executor_keyfile = tmp_path / "executor.keys.json"
 
-    gen_keys("test_gate.keys.json")
-    gen_keys("test_agent.keys.json")
-    gen_keys("test_executor.keys.json")
+    gen_keys(str(gate_keyfile))
+    gen_keys(str(agent_keyfile))
+    gen_keys(str(executor_keyfile))
 
-    gate = TempusDDB(gate_db, "test_gate.keys.json")
+    gate = TempusDDB(str(gate_db), str(gate_keyfile))
 
-    with open("test_gate.keys.json") as f:
+    with gate_keyfile.open(encoding="utf-8") as f:
         gate_id = json.load(f)["public_key"]
-    with open("test_agent.keys.json") as f:
+    with agent_keyfile.open(encoding="utf-8") as f:
         agent_id = json.load(f)["public_key"]
-    with open("test_executor.keys.json") as f:
+    with executor_keyfile.open(encoding="utf-8") as f:
         executor_id = json.load(f)["public_key"]
 
     gate.register_agent(gate_id, "tempus-gate", '{"can_delegate":true}')
@@ -77,12 +76,14 @@ def setup_test_env():
     gate.register_agent(executor_id, "test-executor", "{}")
 
     api = MockPurchasingAPI()
-    proxy = ExecutorProxy(exec_db, "test_executor.keys.json", gate_id, "test-tenant", api)
+    proxy = ExecutorProxy(
+        str(exec_db), str(executor_keyfile), gate_id, "test-tenant", api
+    )
 
-    return gate, proxy, api, agent_id
+    return gate, proxy, api, agent_id, str(agent_keyfile)
 
-def test_successful_purchase_and_replay_prevention():
-    gate, proxy, api, agent_id = setup_test_env()
+def test_successful_purchase_and_replay_prevention(tmp_path):
+    gate, proxy, api, agent_id, agent_keyfile = setup_test_env(tmp_path)
 
     intent = json.dumps({
         "schema_version": "tempus.action-intent.v1",
@@ -96,7 +97,7 @@ def test_successful_purchase_and_replay_prevention():
     })
 
     # Agent gets a permit from the gate
-    auth_result = json.loads(gate.request_action(intent, "test_agent.keys.json", 60))
+    auth_result = json.loads(gate.request_action(intent, agent_keyfile, 60))
     permit = json.dumps(auth_result)
 
     # 1. Valid execution
@@ -113,8 +114,8 @@ def test_successful_purchase_and_replay_prevention():
     # The API should not have been called again!
     assert api.purchase_count == 1
 
-def test_expired_permit():
-    gate, proxy, api, agent_id = setup_test_env()
+def test_expired_permit(tmp_path):
+    gate, proxy, api, agent_id, agent_keyfile = setup_test_env(tmp_path)
 
     intent = json.dumps({
         "schema_version": "tempus.action-intent.v1",
@@ -129,7 +130,7 @@ def test_expired_permit():
 
     # Agent gets a permit but it expires immediately (0 seconds)
     # Wait, the rust implementation adds TTL to current time. We might need a small sleep if TTL is 1 sec.
-    auth_result = json.loads(gate.request_action(intent, "test_agent.keys.json", 1))
+    auth_result = json.loads(gate.request_action(intent, agent_keyfile, 1))
     permit = json.dumps(auth_result)
 
     time.sleep(1.1)
@@ -139,8 +140,8 @@ def test_expired_permit():
     assert "Permit has expired" in outcome["error"]
     assert api.purchase_count == 0
 
-def test_tampered_permit():
-    gate, proxy, api, agent_id = setup_test_env()
+def test_tampered_permit(tmp_path):
+    gate, proxy, api, agent_id, agent_keyfile = setup_test_env(tmp_path)
 
     intent = json.dumps({
         "schema_version": "tempus.action-intent.v1",
@@ -153,7 +154,7 @@ def test_tampered_permit():
         "input": {"amount": 100},
     })
 
-    auth_result = json.loads(gate.request_action(intent, "test_agent.keys.json", 60))
+    auth_result = json.loads(gate.request_action(intent, agent_keyfile, 60))
     # Agent tries to change the decision or something in the authorization
     auth_result["authorization"]["decision"] = "ALLOWED" # Even if allowed, changing a byte breaks signature
     auth_result["authorization"]["action_id"] = "fake-action"
@@ -164,8 +165,8 @@ def test_tampered_permit():
     assert ("Invalid gate signature" in outcome["error"] or "Authorization ID mismatch" in outcome["error"])
     assert api.purchase_count == 0
 
-def test_cross_tenant_permit():
-    gate, proxy, api, agent_id = setup_test_env()
+def test_cross_tenant_permit(tmp_path):
+    gate, proxy, api, agent_id, agent_keyfile = setup_test_env(tmp_path)
 
     intent = json.dumps({
         "schema_version": "tempus.action-intent.v1",
@@ -178,7 +179,7 @@ def test_cross_tenant_permit():
         "input": {"amount": 100},
     })
 
-    auth_result = json.loads(gate.request_action(intent, "test_agent.keys.json", 60))
+    auth_result = json.loads(gate.request_action(intent, agent_keyfile, 60))
     permit = json.dumps(auth_result)
 
     outcome = proxy.process_purchase_request(permit)
@@ -186,4 +187,4 @@ def test_cross_tenant_permit():
     assert "Cross-tenant permit rejected" in outcome["error"]
     assert api.purchase_count == 0
 if __name__ == "__main__":
-    pytest.main(["-v", "test_executor_e2e.py"])
+    pytest.main(["-v", __file__])

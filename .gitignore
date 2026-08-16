@@ -1,40 +1,90 @@
-# Build artifacts & binary outputs
-/target
-/build
-/dist
-/.tmp
-/scratch
-*.egg-info/
-*.pyd
-*.so
-*.dll
-*.exe
-*.whl
-
-# Data & database files (SQLite databases, WAL, and SHM files)
-*.db
-*.db-wal
-*.db-shm
-*.sqlite
-*.sqlite3
-server_secret.key
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.keys.json
+*_keys.json
 keys.json
 agent_wallet.json
-tempus.db
-*.keys.json
-test_*.db
+server_secret.key
+credentials*.json
+*.secrets.json
 
-# Python & caches
+# Local databases and runtime state
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.wal
+*.shm
+*.journal
+
+# Rust build output
+/target/
+
+# Python bytecode, environments, and tool caches
 __pycache__/
+*.py[cod]
+*$py.class
 .pytest_cache/
 .ruff_cache/
-.venv*
-.env
-*.pyc
+.mypy_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+.venv/
+.venv*/
+venv/
+ENV/
 
-# Logs
+# Package and release artifacts
+/build/
+/dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.whl
+*.tar.gz
+/artifacts/
+
+# Coverage, profiling, and benchmark output
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.prof
+*.flamegraph.svg
+/.benchmarks/
+/benchmark-results/
+
+# Temporary workspaces and logs
+/.tmp/
+/scratch/
+/tmp/
+/temp/
+*.tmp
+*.temp
 *.log
+*.bak
+*.orig
+*.rej
+*.swp
+*~
 
-# Other
-tempus_sdk/
-ROADMAP.md
+# Editors and operating systems
+.idea/
+.vscode/
+.vs/
+*.suo
+*.user
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini

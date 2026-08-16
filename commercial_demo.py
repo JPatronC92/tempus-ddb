@@ -95,7 +95,7 @@ def main():
         gate.register_agent(executor_id, "test-executor", "{}")
 
         tenant_id = "demo-tenant"
-        api_secret = "secret_downstream_token_123"
+        api_secret = "demo-only-executor-credential"
         api = DownstreamAPI(api_secret)
         proxy = ExecutorProxy(exec_db, exec_keyfile, gate_id, tenant_id, api, api_secret)
 

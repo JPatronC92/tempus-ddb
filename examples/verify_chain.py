@@ -5,49 +5,51 @@ This demonstrates the tamper-evident audit trail capability.
 """
 
 import json
-import os
+import gc
+import tempfile
+from pathlib import Path
 
 from tempus_ddb import TempusDDB, gen_keys
 
-DB = "verify_example.db"
-KEYS = "verify_example_keys.json"
-
 def main():
-    for f in [DB, KEYS]:
-        if os.path.exists(f):
-            os.remove(f)
+    with tempfile.TemporaryDirectory(prefix="tempus-verify-") as directory:
+        root = Path(directory)
+        db_path = root / "verify.db"
+        keys_path = root / "gate.keys.json"
 
-    gen_keys(KEYS)
-    db = TempusDDB(DB, KEYS)
+        gen_keys(str(keys_path))
+        db = TempusDDB(str(db_path), str(keys_path))
 
-    # Decision 1 - Genesis
-    h1 = json.loads(db.record(
-        json.dumps({"action": "initialize_agent", "version": "1.0"}),
-        json.dumps({"policy": "strict"}),
-        genesis=True
-    ))
-    print("Genesis hash:", h1.get("latest_hash") or h1.get("output", {}).get("latest_hash"))
+        # Decision 1 - Genesis
+        h1 = json.loads(db.record(
+            json.dumps({"action": "initialize_agent", "version": "1.0"}),
+            json.dumps({"policy": "strict"}),
+            genesis=True
+        ))
+        print("Genesis hash:", h1.get("latest_hash") or h1.get("output", {}).get("latest_hash"))
 
-    # Decision 2
-    h2 = json.loads(db.record(
-        json.dumps({"action": "approve_transaction", "amount": 5000}),
-        json.dumps({"requires_approval": True}),
-        genesis=False
-    ))
-    print("Decision 2 hash:", h2.get("latest_hash") or h2.get("output", {}).get("latest_hash"))
+        # Decision 2
+        h2 = json.loads(db.record(
+            json.dumps({"action": "approve_transaction", "amount": 5000}),
+            json.dumps({"requires_approval": True}),
+            genesis=False
+        ))
+        print("Decision 2 hash:", h2.get("latest_hash") or h2.get("output", {}).get("latest_hash"))
 
-    # Decision 3
-    db.record(
-        json.dumps({"action": "execute_trade", "asset": "BTC"}),
-        json.dumps({"risk_level": "medium"}),
-        genesis=False
-    )
+        # Decision 3
+        db.record(
+            json.dumps({"action": "execute_trade", "asset": "BTC"}),
+            json.dumps({"risk_level": "medium"}),
+            genesis=False
+        )
 
-    print("\nValidating full chain...")
-    result = db.validate()
-    print(result)
+        print("\nValidating full chain...")
+        result = db.validate()
+        print(result)
 
-    print("\n✅ Chain verified successfully. All decisions are tamper-evident.")
+        print("\n✅ Chain verified successfully. Temporary files were removed.")
+        del db
+        gc.collect()
 
 if __name__ == "__main__":
     main()

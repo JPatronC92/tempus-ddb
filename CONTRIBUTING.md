@@ -21,26 +21,40 @@ We are committed to providing a friendly, safe and welcoming environment for all
 ```bash
 git clone https://github.com/JPatronC92/tempus-ddb.git
 cd tempus-ddb
-pip install -e .
+python -m venv .venv
+python -m pip install -e .[dev]
 ```
 
-For Rust changes:
-
-```bash
-cargo build
-```
+Python 3.10 or newer and a stable Rust toolchain are required.
 
 ## Testing
 
-- Python tests: `pytest tests/ -v`
-- Rust tests: `cargo test`
-- CLI tests are included in the Python test suite.
+Run the same core checks enforced by CI:
+
+```bash
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test --all-targets
+ruff check .
+pytest -p no:cacheprovider
+```
+
+Tests and examples must use temporary workspaces. Do not commit databases, keys,
+credentials, logs, caches, wheels, or build output.
 
 ## Pull Request Guidelines
 
 - Keep PRs focused.
 - Update documentation if needed.
 - Add tests for new functionality.
+- Preserve fail-closed behavior for unknown schema, policy, and execution states.
+- Update `CHANGELOG.md` for user-visible changes.
+
+## Security Changes
+
+Do not open a public issue for a suspected vulnerability. Follow
+[SECURITY.md](SECURITY.md). Security-sensitive pull requests should document the trust
+boundary they change and include an adversarial regression test.
 
 ## Questions?
 

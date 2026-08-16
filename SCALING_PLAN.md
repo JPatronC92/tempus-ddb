@@ -1,7 +1,7 @@
 # 🚀 Plan de Escalabilidad y Hoja de Ruta Enterprise: Tempus DDB
 
 **Proyecto:** Tempus DDB — Infraestructura de Seguridad B2A (Business-to-Agent & Agent-to-Agent)  
-**Versión Actual:** v0.2.1 (Slice Vertical Local)  
+**Versión Actual:** v0.3.0 (Local B2A gate; Phase 2 implemented for GitHub)
 **Objetivo:** Transición de Ledger Local a Plataforma Distribuida de Alta Disponibilidad y Seguridad Enterprise.
 
 ---
@@ -52,7 +52,7 @@
 ## 🗓️ Fases de Escalabilidad
 
 ### 📍 Fase 1: Optimización de Almacenamiento Local (10k-50k ops/sec)
-*Estado: Implementado parcialmente en v0.2.1 (WAL Mode + Performance Profile).*
+*Estado: Implementado parcialmente en v0.2.1 y mantenido en v0.3.0 (WAL Mode + Performance Profile).*
 
 - [x] **SQLite WAL Mode & PRAGMA Performance:** Configurar `journal_mode = WAL`, `synchronous = NORMAL` y `busy_timeout = 5000`.
 - [x] **Caché en Memoria de Llaves:** Eliminar lecturas redundantes a disco de `keys.json` mediante caching en memoria (`RefCell<Option<SigningKey>>`).
@@ -64,28 +64,40 @@
 ### 📍 Fase 2: Adaptadores de Ejecutor Mediado Out-of-the-Box
 *Objetivo: Convertir Tempus en una barrera infranqueable de seguridad donde el Agente jamás posea las credenciales finales.*
 
-- [ ] **Proxy HTTP / Reverse Proxy:**
-  - Crear un proxy reverse transparente en Rust (usando `hyper` / `axum`) que intercepte peticiones HTTP de agentes hacia APIs externas.
-  - El proxy valida el permiso Tempus antes de adjuntar la cabecera `Authorization: Bearer <SECRET_TOKEN>` real.
-- [ ] **Adaptador de Base de Datos (PostgreSQL / MySQL / Redis):**
-  - Proxy mediador para queries destructivas o de alto valor (`UPDATE`, `DELETE`, `DROP`).
-- [ ] **Adaptador Web3 / Wallets Cripto:**
-  - Mediador para firmas de transacciones en blockchain que solo firma y transmite si existe un permiso Tempus `ALLOWED` válido.
+- [x] **Executor genérico con consumo atómico:** valida firma, gate, tenant, versión de
+  política, expiración, digest de intención y replay antes del efecto.
+- [x] **Adaptador GitHub empaquetado:** `tempus-github-executor` crea issues y pull
+  requests mediante la API REST usando un token disponible solo en el proceso executor.
+- [x] **Binding exacto:** deriva endpoint, repositorio y payload exclusivamente de la
+  intención firmada; rechaza acciones y argumentos no soportados.
+- [x] **Estados y recuperación:** observaciones firmadas `STARTED`, `SUCCEEDED`,
+  `FAILED` y `UNKNOWN`; un reinicio nunca reintenta automáticamente un efecto ambiguo.
+- [x] **Conformance:** pruebas de replay, expiración, tampering, cross-tenant, binding,
+  fallo definitivo, resultado ambiguo y recuperación tras reinicio.
+
+Los adapters de base de datos, Web3 y el proxy HTTP genérico son expansión posterior y
+no forman parte del criterio de cierre de la Fase 2 enfocada en GitHub.
 
 ---
 
 ### 📍 Fase 3: Identidad Enterprise, KMS y Gestión de Llaves
-*Objetivo: Eliminar completamente los archivos de llaves en texto plano (`keys.json`) en entornos de producción.*
+*Objetivo: hacer explícitas la política, la identidad y la firma de producción antes de escalar horizontalmente.*
 
-- [ ] **Integración con HSM y Cloud KMS:**
-  - Abstracción de traits en Rust para proveedores de firma: `AWS KMS`, `GCP Cloud KMS`, `Azure Key Vault`, y `HashiCorp Vault`.
-  - Firma remota asíncrona mediante llamadas de API del KMS sin exponer llaves privadas.
-- [ ] **Workload Identity & OIDC:**
-  - Autenticación automática de agentes mediante SPIFFE/SPIRE, Kubernetes Service Account Tokens (JWT), o tokens IAM de la nube.
-  - Generación dinámica de certificados/llaves efímeras para agentes sin necesidad de registro manual previo.
-- [ ] **Revocación y Rotación de Llaves:**
-  - Registro inmutable de eventos de rotación y revocación de llaves de agentes y ejecutores.
-  - Verificación histórica retroactiva: los recibos antiguos siguen siendo verificables incluso tras la rotación de llaves del emisor.
+- [ ] **Abstracción de firma y resolución de llaves:**
+  - Trait estable para firmantes locales y remotos, con URI del firmante, versión de llave y algoritmo.
+  - Mantener Ed25519 para contratos v1 y añadir agilidad criptográfica sólo mediante una nueva versión de contrato.
+- [ ] **Política determinista firmada:**
+  - Sustituir `baseline-v1` por bundles versionados y firmados por el gate.
+  - Incluir razón de decisión, digest de política y digest de evidencia en cada permiso.
+- [ ] **Revocación, rotación y delegación por tenant:**
+  - Registrar eventos firmados de ciclo de vida para agentes y ejecutores.
+  - Resolver la llave válida en el instante de firma para conservar la verificación histórica.
+- [ ] **Workload Identity y primer proveedor de producción:**
+  - Autenticar gate y ejecutores mediante OIDC/IAM o SPIFFE, sin secretos estáticos del servicio.
+  - Seleccionar el primer Vault/KMS/HSM por compatibilidad criptográfica demostrada, no sólo por marca del proveedor.
+  - Ejecutar fixtures de conformidad offline y pruebas de integración opt-in con credenciales externas.
+
+El orden de entrega y los hitos de adopción están en [ROADMAP.md](ROADMAP.md).
 
 ---
 
@@ -126,6 +138,10 @@
 
 ## 📊 Métricas Clave de Desempeño (KPIs de Escalabilidad)
 
+Las cifras siguientes son metas de diseño, no resultados medidos. Cada release deberá
+publicar hardware, tamaño de muestra, percentiles y script reproducible antes de declarar
+una meta cumplida.
+
 | Métrica | Meta Corto Plazo | Meta Enterprise (Escala) |
 |---|---|---|
 | **Latencia de Permiso (`request_action`)** | < 2 ms | < 500 µs |
@@ -138,9 +154,12 @@
 
 ## 🔒 Cumplimiento Normativo (Compliance Targets)
 
-Un ledger inmutable y verificable posiciona a Tempus DDB como la capa de cumplimiento ideal para regulaciones de IA:
+Estos son objetivos de alineación para orientar el diseño; Tempus DDB no ofrece por sí
+solo certificación ni garantía de cumplimiento. La versión local actual detecta cambios
+en los recibos, pero todavía no detecta de forma independiente la eliminación o rollback
+de toda la base de datos.
 
 - **EU AI Act (Artículo 12 - Record-keeping):** Trazabilidad y registro automático de eventos durante todo el ciclo de vida de sistemas de IA de alto riesgo.
 - **SOC 2 Type II (Trust Services Criteria - Security & Availability):** Pista de auditoría inalterable para operaciones automatizadas.
 - **ISO/IEC 42001 (Artificial Intelligence Management System):** Controles de gobernanza y responsabilidad en decisiones autónomas.
-- **HIPAA / PCI-DSS:** Registro inmutable de acceso y modificación de datos sensibles de salud o financieros por parte de agentes.
+- **HIPAA / PCI-DSS:** Evidencia verificable como control complementario; el manejo de datos sensibles, acceso, cifrado y retención pertenece al despliegue completo.

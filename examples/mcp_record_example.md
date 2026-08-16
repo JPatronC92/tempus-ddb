@@ -1,45 +1,38 @@
-# Using Tempus DDB with MCP (e.g. Claude Desktop)
+# Using Tempus DDB with MCP
 
-1. Make sure you have the package installed:
-   ```bash
-   pip install -e .
-   ```
+The default MCP server is an autonomous B2A gate, not a legacy decision recorder. It
+never accepts an agent or executor private-key path. The requesting agent signs the
+canonical intent locally, and the executor signs the outcome locally.
 
-2. Add to your MCP client config (Claude, Cursor, etc.):
+1. Install and configure the server:
 
 ```json
 {
   "mcpServers": {
     "tempus-ddb": {
       "command": "tempus",
-      "args": ["mcp", "start"]
+      "args": ["mcp", "start"],
+      "env": {
+        "TEMPUS_MODE": "autonomous",
+        "TEMPUS_GATE_KEYFILE": "keys.json"
+      }
     }
   }
 }
 ```
 
-3. In your conversation with the agent, instruct it to use the tools:
+2. Provision the gate and register identities outside the agent-facing MCP process.
+Use the CLI or a separately controlled process with `TEMPUS_ADMIN_TOOLS=1`.
 
-Example prompt you can give the agent:
+3. An autonomous client uses these default tools:
 
-"You must use the tempus_init, tempus_gen_keys, and tempus_record_decision tools 
-to record any important decision before executing it.
+- `tempus_request_action_signed`: submits `intent`, `agent_id`, and
+  `agent_signature` to obtain a permit.
+- `tempus_commit_outcome_signed`: submits an executor-signed outcome to consume a
+  permit.
+- `tempus_get_trace`, `tempus_verify_trace`, and `tempus_list_agents`: read-only
+  evidence operations.
 
-Example decision:
-- payload: {\"action\": \"update_pricing\", \"old_price\": 99, \"new_price\": 129}
-- rules: {\"max_change_percent\": 50, \"requires_review\": true}
-- Use genesis=true for the first decision.
-
-Always call tempus_validate after a few decisions to prove the chain is intact."
-
-The agent will then call the MCP tools automatically.
-
-## Available Tools
-
-- tempus_init
-- tempus_gen_keys  
-- tempus_record / tempus_record_decision
-- tempus_validate
-- tempus_cleanup
-
-See the main README for parameter details.
+The legacy `record`, `validate`, and cleanup tools remain available only with their
+explicit environment flags. Local keyfile B2A tools also require
+`TEMPUS_LOCAL_KEYFILE_TOOLS=1` and are for development compatibility only.

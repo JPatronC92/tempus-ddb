@@ -26,7 +26,7 @@ If applicable, add screenshots to help explain your problem.
 **Environment (please complete the following information):**
  - OS: [e.g. Windows 11]
  - Python version: [e.g. 3.12]
- - Tempus DDB version: [e.g. 0.2.0]
+ - Tempus DDB version: [e.g. 0.3.0]
 
 **Additional context**
 Add any other context about the problem here.

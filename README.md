@@ -8,6 +8,13 @@
 Local-first · Fail-closed contracts · Ed25519 receipts · MCP-native
 </div>
 
+> **Status: public alpha candidate (`0.3.0`).** The protocol and package are usable for
+> evaluation, but production key management, distributed durability, and compatibility
+> guarantees are Phase 3+ work.
+>
+> [Roadmap](ROADMAP.md) · [Security](SECURITY.md) ·
+> [Threat model](THREAT_MODEL.md) · [Contributing](CONTRIBUTING.md)
+
 Tempus sits between an agent's intent and an external effect. The agent signs what it
 wants to do, Tempus issues a short-lived permit, an executor performs the effect, and
 the executor plus Tempus sign the outcome. A human is not part of the transaction loop;
@@ -16,9 +23,10 @@ humans only inspect the resulting history.
 > **Product invariant:** no Tempus permit, no effect; every effect produces a verifiable
 > receipt.
 
-The current `main` branch implements the first complete local vertical slice of that
-contract. It does **not** yet include the credential-holding executor proxy, remote KMS,
-external checkpoints, or a web audit console. See [B2A_IMPLEMENTATION_PLAN.md](B2A_IMPLEMENTATION_PLAN.md)
+The `0.3.0` source tree implements the complete local permit protocol, a generic
+mediated executor, and a packaged credential-isolated GitHub REST adapter. It does
+**not** yet include remote KMS, distributed permit consumption, external checkpoints,
+or a web audit console. See [B2A_IMPLEMENTATION_PLAN.md](B2A_IMPLEMENTATION_PLAN.md)
 and [THREAT_MODEL.md](THREAT_MODEL.md) for the exact boundary.
 
 ## What is implemented
@@ -33,6 +41,13 @@ and [THREAT_MODEL.md](THREAT_MODEL.md) for the exact boundary.
   conflicting second outcome is rejected.
 - End-to-end verification of intent, gate authorization, executor outcome, and receipt
   linkage.
+- A generic `TempusExecutor` that verifies gate identity, tenant, expiry, permit
+  integrity, and single consumption before a demo adapter produces an effect.
+- Signed executor observations for `STARTED`, `SUCCEEDED`, `FAILED`, and `UNKNOWN`, with
+  restart recovery that never retries an ambiguous external effect.
+- A packaged GitHub executor for `github.create_issue` and
+  `github.create_pull_request`; it binds the exact repository and allowlisted arguments
+  from the signed intent and keeps `GITHUB_TOKEN` outside the agent payload.
 - Money is optional metadata in the same universal action envelope; financial and
   non-financial actions use the same protocol.
 - An autonomous MCP surface that hides administrative, legacy, and destructive tools by
@@ -59,11 +74,14 @@ Tempus commit_outcome ──► final signed execution receipt
 human or machine calls verify_trace
 ```
 
-Tempus becomes an unavoidable toll only when the executor or downstream API holds the
-real credentials and refuses requests without a valid Tempus permit. The current repo
-provides the permit protocol; mediated executor adapters are the next production phase.
+Tempus becomes an unavoidable toll when the executor exclusively holds the downstream
+credential. The packaged GitHub adapter implements that boundary for its supported
+actions in a single-instance deployment. Operators must ensure the requesting agent
+cannot read the executor's environment or key material.
 
 ## Install
+
+Python 3.10 or newer is required.
 
 ```bash
 pip install tempus-ddb
@@ -153,15 +171,18 @@ assert verification["status"] == "VERIFIED"
 assert verification["phase"] == "COMPLETED"
 ```
 
-For remote transports, use `request_action_signed(...)` so the agent signs locally and
-never sends its private key or keyfile to Tempus.
+For remote transports, use `request_action_signed(...)` and
+`commit_outcome_signed(...)`. The requesting agent and executor sign locally, so their
+private keys and keyfiles never enter the gate process.
 
 ## Demos and Scenarios
 
 The repository includes runnable end-to-end demonstrations covering security guards, B2A flow, and tamper detection:
+Examples create ephemeral databases and keys and remove them when they finish.
 
 ### 1. Commercial Demo (`commercial_demo.py`)
-Demonstrates Phase 2 **Enforced Executor Mediation** and bypass prevention. An agent without a permit cannot access downstream APIs.
+Demonstrates the Phase 2 mediated-executor foundation and bypass prevention against a
+simulated downstream API.
 ```bash
 python commercial_demo.py
 ```
@@ -196,6 +217,34 @@ Additional standalone scripts in `examples/`:
 python examples/full_agent_flow.py
 ```
 
+## GitHub executor
+
+The installed `tempus-github-executor` command performs real GitHub REST writes for two
+exact action types:
+
+- `github.create_issue`, with `resource` set to `owner/repository` and allowlisted
+  `title`, `body`, and `labels` input fields.
+- `github.create_pull_request`, with `resource` set to `owner/repository` and
+  allowlisted `title`, `head`, `base`, `body`, and `draft` input fields.
+
+The executor reads `GITHUB_TOKEN` from its own environment. Do not put that variable in
+the requesting agent's environment or include credentials in an intent.
+
+```powershell
+$env:GITHUB_TOKEN = '<executor-only token>'
+tempus-github-executor `
+  --permit permit.json `
+  --executor-db github-executor.db `
+  --executor-keyfile executor.keys.json `
+  --gate-id <gate-public-key> `
+  --tenant-id acme
+```
+
+The command emits a signed `tempus.action-outcome.v1`. Submit it to the gate through
+`commit_outcome_signed(...)` or `tempus_commit_outcome_signed`. Exit code `2` means the
+external result is `UNKNOWN`; the signed observation must be investigated and the
+operation must not be retried automatically.
+
 ## Performance Benchmarks
 
 Tempus DDB includes a benchmarking tool to evaluate transaction throughput and validation latency:
@@ -224,21 +273,24 @@ python benchmark.py --records 1000 --json
 | Executor outcome | `tempus.action-outcome.v1` |
 | Execution response | `tempus.execution-result.v1` |
 | Signed execution receipt | `tempus.execution-receipt.v1` |
+| Executor state observation | `tempus.executor-observation.v1` |
 | Complete trace | `tempus.action-trace.v1` |
 | Verification result | `tempus.trace-verification.v1` |
 
 Authorization decisions are `ALLOWED` or `BLOCKED`. Execution outcomes are `SUCCEEDED`
-or `FAILED`. Trace verification is `VERIFIED` or `INVALID`.
+or `FAILED`. Executor observations are `STARTED`, `SUCCEEDED`, `FAILED`, or `UNKNOWN`.
+Trace verification is `VERIFIED` or `INVALID`.
 
 ## MCP autonomous mode
 
 The default MCP surface exposes only machine-to-machine execution and read-only audit
-operations:
+operations. The agent and executor must sign their own payloads; the gate never receives
+their keyfile paths:
 
 | Tool | Purpose |
 |---|---|
-| `tempus_request_action` | Obtain a signed, expiring permit |
-| `tempus_commit_outcome` | Consume a permit with an executor-signed result |
+| `tempus_request_action_signed` | Verify a locally signed intent and obtain a signed, expiring permit |
+| `tempus_commit_outcome_signed` | Consume a permit with an executor-signed result |
 | `tempus_get_trace` | Read authorization and execution evidence |
 | `tempus_verify_trace` | Verify the complete action trace |
 | `tempus_list_agents` | Read signed agent identities |
@@ -268,6 +320,7 @@ flags are deliberately off by default:
 | `TEMPUS_ADMIN_TOOLS=1` | init, key generation, signed agent registration, whoami |
 | `TEMPUS_LEGACY_TOOLS=1` | old voluntary `record`, list, export, count, validate tools |
 | `TEMPUS_DESTRUCTIVE_TOOLS=1` | demo-only cleanup |
+| `TEMPUS_LOCAL_KEYFILE_TOOLS=1` | development-only `tempus_request_action` and `tempus_commit_outcome` tools that accept local keyfile paths |
 
 ## Human audit
 
@@ -285,7 +338,8 @@ The future audit console will be read-only and derive its views from these contr
 
 The original `record`, `validate`, `list`, `count`, and `export` interfaces remain for
 compatibility and migration. They are a voluntary flight recorder and do not enforce
-the B2A toll. New autonomous integrations should use the action authorization flow.
+the B2A toll. New autonomous integrations should use the signed action authorization
+flow; local keyfile MCP tools are development compatibility only.
 
 ## Security boundary
 
@@ -295,7 +349,18 @@ permit. It does not yet prevent deletion of the entire local database or bypass 
 agent that still possesses downstream credentials. Read [THREAT_MODEL.md](THREAT_MODEL.md)
 before using Tempus for high-impact production actions.
 
+## Roadmap and adoption
+
+Phase 2 is complete for the single-instance GitHub adapter. Phase 3 will make policy,
+identity lifecycle, and production signing explicit before Tempus attempts horizontal
+scale. The adoption track focuses on a short GitHub onboarding path, design partners,
+conformance fixtures, and measurable time-to-first-verified-effect. See
+[ROADMAP.md](ROADMAP.md) for ordered milestones and release gates.
+
 ## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, security reporting, and pull-request
+requirements. The complete local verification set is:
 
 ```bash
 cargo fmt --check
