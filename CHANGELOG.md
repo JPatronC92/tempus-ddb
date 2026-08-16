@@ -11,6 +11,14 @@
 - Deterministic action idempotency, expiring permits, and single-consumption outcomes.
 - Rust, Python, CLI, and MCP B2A surfaces plus replay/tamper/authorization tests.
 - Source-of-truth B2A implementation plan and production-oriented threat model.
+- Signed MCP authorization and outcome tools for clients that keep agent and executor
+  private keys outside the gate process.
+- Signed executor observations for `STARTED`, `SUCCEEDED`, `FAILED`, and `UNKNOWN`, plus
+  restart recovery that never replays an ambiguous external effect.
+- Packaged `tempus-github-executor` for exactly bound GitHub issue and pull-request
+  creation with an executor-only credential.
+- A public product roadmap with ordered Phase 3 trust and adoption milestones.
+- Dependabot coverage for Cargo, Python, and GitHub Actions dependencies.
 
 ### Changed
 
@@ -18,6 +26,15 @@
   destructive tools now require explicit environment flags.
 - Product positioning now treats money as optional action metadata and humans as
   read-only auditors rather than transaction approvers.
+- Default MCP mode now exposes only signed B2A write tools. The compatibility tools
+  that receive local keyfile paths require `TEMPUS_LOCAL_KEYFILE_TOOLS=1`.
+- Phase 2 is complete for the single-instance GitHub adapter, including policy-version
+  checks, exact argument binding, credential isolation, and crash recovery.
+- Package metadata now reflects the actual Python 3.10+ MCP dependency and alpha status.
+- The Python package exports its installed version and the GitHub executor derives its
+  user-agent version from package metadata.
+- Tests and runnable examples use self-cleaning temporary workspaces instead of leaving
+  databases and generated keys in the repository root.
 
 ### Security
 

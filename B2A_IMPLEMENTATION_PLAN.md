@@ -53,9 +53,13 @@ the organizing principle of the core protocol.
 
 ### Current limitation
 
-The repo implements the permit protocol but not yet the credential-holding executor proxy.
-An agent that still owns downstream credentials can bypass Tempus. Therefore the current
-state is a validated vertical slice, not a production security boundary.
+The repo includes a generic mediated executor and a packaged GitHub REST adapter. The
+adapter holds its token outside the agent process, binds the signed action type,
+repository, and arguments to the outbound request, and records signed executor states.
+This completes the single-instance Phase 2 boundary for the supported GitHub actions.
+It is not yet an enterprise boundary: deployments still need to ensure the agent cannot
+obtain the GitHub token, and KMS, distributed consumption, and rich policy are later
+phases.
 
 ## Architecture target
 
@@ -103,39 +107,66 @@ Exit gate:
 
 ### Phase 2 — Enforced executor mediation
 
-Status: next.
+Status: implemented for the single-instance GitHub adapter.
 
-- Define an executor adapter contract that accepts only a complete Tempus permit.
-- Move downstream API keys, wallets, and service credentials out of the agent process.
-- Verify permit signature, policy version, TTL, action digest, tenant, and consumption
-  state inside the executor.
-- Add atomic consume-before-effect semantics and crash recovery.
-- Add signed `STARTED`, `SUCCEEDED`, `FAILED`, and `UNKNOWN` observations where required.
-- Prove bypass prevention with an end-to-end adapter test.
+Completed:
+
+- Generic `TempusExecutor` and SQLite-backed single-consumption store.
+- Gate identity, tenant, authorization integrity, intent-hash, expiry, and replay checks
+  before an adapter produces an effect.
+- Explicit policy-version validation inside the executor.
+- Packaged `tempus-github-executor` adapter for GitHub issue and pull-request creation;
+  the token is read by the executor process and is never accepted in the permit.
+- Exact binding of `action_type`, `resource`, and the complete allowlisted argument set
+  to the GitHub REST request.
+- Atomic consume-before-effect semantics with signed `STARTED`, `SUCCEEDED`, `FAILED`,
+  and `UNKNOWN` executor observations.
+- Restart recovery converts abandoned `STARTED` operations to `UNKNOWN` and never
+  retries an ambiguous external effect.
+- End-to-end tests for bypass, replay, expiry, tampering, cross-tenant use, argument
+  rejection, definitive failure, ambiguous transport failure, and crash recovery.
 
 Exit gate:
 
-- A requesting agent cannot produce the external effect without a Tempus permit.
+- Satisfied for `github.create_issue` and `github.create_pull_request` in a
+  single-instance executor deployment.
+- A requesting agent without the executor-held credential cannot produce the supported
+  external effect.
 - Replayed, expired, altered, cross-tenant, or already-consumed permits are rejected by
   the executor itself.
-- Executor crash recovery cannot create an untraceable duplicate effect.
+- Executor crash recovery produces a signed `UNKNOWN` observation and cannot create an
+  untraceable duplicate effect.
 
 ### Phase 3 — Policy, delegation, and workload identity
 
 Status: planned.
 
-- Signed, versioned, deterministic policy bundles controlled by the gate.
-- Tenant-scoped delegation capabilities.
-- Signed agent/executor revocation and key rotation events.
-- KMS/HSM and cloud workload identity signer interfaces.
-- Decision reasons and evidence hashes included in every permit.
-- Policy tests for money and non-money actions using the same envelope.
+Implementation order:
+
+1. Introduce a signer and verification-key resolver interface. Preserve Ed25519 for v1
+   receipts and attach a stable signer URI plus key version to new identities.
+2. Replace the hard-coded `baseline-v1` policy marker with signed, versioned,
+   deterministic policy bundles controlled by the gate. Include decision reason codes,
+   policy digest, and evidence digest in every permit.
+3. Add tenant-scoped delegation, signed revocation, and key-rotation events. Verification
+   resolves the key that was valid at signing time, so historical receipts survive
+   rotation and later revocation.
+4. Add workload identity for gate and executor services, then implement the first remote
+   signer with an end-to-end conformance suite.
+5. Add algorithm agility through a new contract version before integrating providers
+   that cannot produce Ed25519 signatures. A cloud KMS name alone is not assumed to be
+   compatible with the existing v1 receipt format.
+6. Exercise the same policy engine against money and non-money actions using the
+   universal action envelope.
 
 Exit gate:
 
 - No production key requires a plaintext private-key file.
 - Historical receipts remain verifiable after rotation or revocation.
 - Unknown policy versions fail closed.
+- Policy and signer-provider conformance fixtures pass without network credentials.
+
+Product and adoption milestones are tracked in [ROADMAP.md](ROADMAP.md).
 
 ### Phase 4 — Durable distributed receipts
 

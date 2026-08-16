@@ -13,7 +13,7 @@ const EXECUTION_RECEIPT_SCHEMA: &str = "tempus.execution-receipt.v1";
 const TRACE_SCHEMA: &str = "tempus.action-trace.v1";
 const TRACE_VERIFICATION_SCHEMA: &str = "tempus.trace-verification.v1";
 const AGENT_REGISTRATION_SCHEMA: &str = "tempus.agent-registration.v1";
-const POLICY_VERSION: &str = "tempus.identity-gate.v1";
+pub(crate) const POLICY_VERSION: &str = "tempus.identity-gate.v1";
 
 #[derive(Debug)]
 struct AgentState {

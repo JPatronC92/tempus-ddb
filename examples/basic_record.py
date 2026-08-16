@@ -6,65 +6,61 @@ Run with: python examples/basic_record.py
 """
 
 import json
-import os
+import gc
+import tempfile
+from pathlib import Path
 
 from tempus_ddb import TempusDDB, gen_keys
 
-DB_PATH = "examples_tempus.db"
-KEY_PATH = "examples_keys.json"
-
 def main():
-    # Clean previous run
-    for f in [DB_PATH, KEY_PATH]:
-        if os.path.exists(f):
-            os.remove(f)
+    with tempfile.TemporaryDirectory(prefix="tempus-basic-") as directory:
+        db_path = Path(directory) / "tempus.db"
+        key_path = Path(directory) / "gate.keys.json"
 
-    print("=== Generating keys ===")
-    gen_keys(KEY_PATH)
-    print(f"Keys saved to {KEY_PATH}")
+        print("=== Generating an ephemeral demo identity ===")
+        gen_keys(str(key_path))
 
-    print("\n=== Initializing ledger ===")
-    db = TempusDDB(DB_PATH, KEY_PATH)
-    print(f"Ledger created at {DB_PATH}")
+        print("\n=== Initializing an ephemeral ledger ===")
+        db = TempusDDB(str(db_path), str(key_path))
 
-    print("\n=== Recording genesis decision ===")
-    payload1 = json.dumps({
-        "action": "approve_budget",
-        "amount": 12500,
-        "currency": "USD",
-        "reason": "Q3 marketing campaign"
-    })
-    rules1 = json.dumps({
-        "max_amount": 15000,
-        "requires_approval": True,
-        "approver_role": "finance_lead"
-    })
+        print("\n=== Recording genesis decision ===")
+        payload1 = json.dumps({
+            "action": "approve_budget",
+            "amount": 12500,
+            "currency": "USD",
+            "reason": "Q3 marketing campaign"
+        })
+        rules1 = json.dumps({
+            "max_amount": 15000,
+            "requires_approval": True,
+            "approver_role": "finance_lead"
+        })
 
-    result1 = db.record(payload1, rules1, genesis=True)
-    print("Result:", result1)
+        result1 = db.record(payload1, rules1, genesis=True)
+        print("Result:", result1)
 
-    print("\n=== Recording follow-up decision ===")
-    payload2 = json.dumps({
-        "action": "execute_payment",
-        "vendor": "Acme Corp",
-        "amount": 12500,
-        "reference": "INV-2024-0891"
-    })
-    rules2 = json.dumps({
-        "budget_id": "Q3-2024-marketing",
-        "approved_by": "finance_lead"
-    })
+        print("\n=== Recording follow-up decision ===")
+        payload2 = json.dumps({
+            "action": "execute_payment",
+            "vendor": "Acme Corp",
+            "amount": 12500,
+            "reference": "INV-2024-0891"
+        })
+        rules2 = json.dumps({
+            "budget_id": "Q3-2024-marketing",
+            "approved_by": "finance_lead"
+        })
 
-    result2 = db.record(payload2, rules2, genesis=False)
-    print("Result:", result2)
+        result2 = db.record(payload2, rules2, genesis=False)
+        print("Result:", result2)
 
-    print("\n=== Validating the chain ===")
-    validation = db.validate()
-    print("Validation:", validation)
+        print("\n=== Validating the chain ===")
+        validation = db.validate()
+        print("Validation:", validation)
 
-    print("\n✅ Example completed successfully.")
-    print(f"Database: {DB_PATH}")
-    print(f"Keys: {KEY_PATH}")
+        print("\n✅ Example completed successfully; temporary files were removed.")
+        del db
+        gc.collect()
 
 if __name__ == "__main__":
     main()

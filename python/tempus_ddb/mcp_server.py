@@ -18,6 +18,9 @@ TEMPUS_GATE_KEYFILE = os.environ.get("TEMPUS_GATE_KEYFILE", "keys.json")
 TEMPUS_ADMIN_TOOLS = os.environ.get("TEMPUS_ADMIN_TOOLS", "0") == "1"
 TEMPUS_LEGACY_TOOLS = os.environ.get("TEMPUS_LEGACY_TOOLS", "0") == "1"
 TEMPUS_DESTRUCTIVE_TOOLS = os.environ.get("TEMPUS_DESTRUCTIVE_TOOLS", "0") == "1"
+# Development-only compatibility tools that receive private-key file paths from
+# the MCP client. Production agents must sign locally and use the signed tools.
+TEMPUS_LOCAL_KEYFILE_TOOLS = os.environ.get("TEMPUS_LOCAL_KEYFILE_TOOLS", "0") == "1"
 
 ADMIN_TOOL_NAMES = {
     "tempus_init",
@@ -34,6 +37,10 @@ LEGACY_TOOL_NAMES = {
     "tempus_count",
 }
 DESTRUCTIVE_TOOL_NAMES = {"tempus_cleanup"}
+LOCAL_KEYFILE_TOOL_NAMES = {
+    "tempus_request_action",
+    "tempus_commit_outcome",
+}
 
 # ── Path-traversal guard ──────────────────────────────────────────────
 def validate_path(path: str) -> str:
@@ -60,31 +67,31 @@ app = Server("tempus-ddb-mcp")
 async def list_tools() -> list[Tool]:
     tools = [
         Tool(
-            name="tempus_request_action",
-            description="Request a signed, single-use permit before an autonomous action executes.",
+            name="tempus_request_action_signed",
+            description="Verify a locally signed intent and issue a signed, single-use permit.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "db": {"type": "string", "description": "Tempus database path"},
                     "intent": {"type": "string", "description": "tempus.action-intent.v1 JSON"},
-                    "agent_keyfile": {"type": "string", "description": "Requesting agent key file"},
+                    "agent_id": {"type": "string", "description": "Ed25519 public key of the requesting agent"},
+                    "agent_signature": {"type": "string", "description": "Ed25519 signature over the canonical intent"},
                     "ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
                 },
-                "required": ["db", "intent", "agent_keyfile"],
+                "required": ["db", "intent", "agent_id", "agent_signature"],
             },
         ),
         Tool(
-            name="tempus_commit_outcome",
-            description="Consume an allowed permit and append the executor-signed outcome.",
+            name="tempus_commit_outcome_signed",
+            description="Consume an allowed permit with an executor-signed outcome.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "db": {"type": "string", "description": "Tempus database path"},
                     "authorization_id": {"type": "string"},
-                    "outcome": {"type": "string", "description": "tempus.action-outcome.v1 JSON"},
-                    "executor_keyfile": {"type": "string", "description": "Executor key file"},
+                    "outcome": {"type": "string", "description": "tempus.action-outcome.v1 JSON including executor_id and executor_signature"},
                 },
-                "required": ["db", "authorization_id", "outcome", "executor_keyfile"],
+                "required": ["db", "authorization_id", "outcome"],
             },
         ),
         Tool(
@@ -121,6 +128,37 @@ async def list_tools() -> list[Tool]:
             },
         ),
     ]
+    if TEMPUS_LOCAL_KEYFILE_TOOLS:
+        tools.extend([
+            Tool(
+                name="tempus_request_action",
+                description="Development-only: sign an intent from a local agent key file and request a permit.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "db": {"type": "string", "description": "Tempus database path"},
+                        "intent": {"type": "string", "description": "tempus.action-intent.v1 JSON"},
+                        "agent_keyfile": {"type": "string", "description": "Requesting agent key file"},
+                        "ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+                    },
+                    "required": ["db", "intent", "agent_keyfile"],
+                },
+            ),
+            Tool(
+                name="tempus_commit_outcome",
+                description="Development-only: sign an executor outcome from a local key file and append it.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "db": {"type": "string", "description": "Tempus database path"},
+                        "authorization_id": {"type": "string"},
+                        "outcome": {"type": "string", "description": "tempus.action-outcome.v1 JSON"},
+                        "executor_keyfile": {"type": "string", "description": "Executor key file"},
+                    },
+                    "required": ["db", "authorization_id", "outcome", "executor_keyfile"],
+                },
+            ),
+        ])
     if TEMPUS_ADMIN_TOOLS:
         tools.extend([
         Tool(
@@ -264,8 +302,30 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             raise PermissionError("TEMPUS_LEGACY_TOOL_DISABLED")
         if name in DESTRUCTIVE_TOOL_NAMES and not TEMPUS_DESTRUCTIVE_TOOLS:
             raise PermissionError("TEMPUS_DESTRUCTIVE_TOOL_DISABLED")
+        if name in LOCAL_KEYFILE_TOOL_NAMES and not TEMPUS_LOCAL_KEYFILE_TOOLS:
+            raise PermissionError("TEMPUS_LOCAL_KEYFILE_TOOL_DISABLED")
 
-        if name == "tempus_request_action":
+        if name == "tempus_request_action_signed":
+            intent = arguments["intent"]
+            validate_json_string(intent, "intent")
+            output = _gate_db(arguments).request_action_signed(
+                intent,
+                arguments["agent_id"],
+                arguments["agent_signature"],
+                arguments.get("ttl_seconds", 60),
+            )
+            return [TextContent(type="text", text=output)]
+
+        elif name == "tempus_commit_outcome_signed":
+            outcome = arguments["outcome"]
+            validate_json_string(outcome, "outcome")
+            output = _gate_db(arguments).commit_outcome_signed(
+                arguments["authorization_id"],
+                outcome,
+            )
+            return [TextContent(type="text", text=output)]
+
+        elif name == "tempus_request_action":
             intent = arguments["intent"]
             validate_json_string(intent, "intent")
             agent_keyfile = validate_path(arguments["agent_keyfile"])

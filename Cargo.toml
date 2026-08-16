@@ -1,7 +1,7 @@
 [package]
 name = "tempus-ddb"
-version = "0.2.1"
-description = "Free, local-first, tamper-evident decision ledger for AI agents"
+version = "0.3.0"
+description = "Local-first B2A security gate with tamper-evident execution receipts"
 license = "MIT"
 repository = "https://github.com/JPatronC92/tempus-ddb"
 authors = ["Tempus DDB Contributors"]
@@ -25,7 +25,7 @@ rand_core = { version = "0.6", features = ["std"] }
 rand = "0.8"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-pyo3 = { version = "0.29", features = ["extension-module", "abi3-py38"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 
 

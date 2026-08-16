@@ -2,6 +2,7 @@ import json
 import time
 
 import pytest
+from tempus_ddb import TempusExecutor
 import tempus_ddb.mcp_server as mcp_module
 from tempus_ddb.mcp_server import call_tool, list_tools, validate_path
 
@@ -13,6 +14,7 @@ def sandbox(tmp_path, monkeypatch):
     monkeypatch.setattr(mcp_module, "TEMPUS_ADMIN_TOOLS", False)
     monkeypatch.setattr(mcp_module, "TEMPUS_LEGACY_TOOLS", False)
     monkeypatch.setattr(mcp_module, "TEMPUS_DESTRUCTIVE_TOOLS", False)
+    monkeypatch.setattr(mcp_module, "TEMPUS_LOCAL_KEYFILE_TOOLS", False)
     return tmp_path
 
 
@@ -21,12 +23,14 @@ async def test_default_tool_surface_is_b2a_and_fail_closed(sandbox):
     tools = await list_tools()
     names = {tool.name for tool in tools}
     assert {
-        "tempus_request_action",
-        "tempus_commit_outcome",
+        "tempus_request_action_signed",
+        "tempus_commit_outcome_signed",
         "tempus_get_trace",
         "tempus_verify_trace",
         "tempus_list_agents",
     } <= names
+    assert "tempus_request_action" not in names
+    assert "tempus_commit_outcome" not in names
     assert "tempus_record" not in names
     assert "tempus_register_agent" not in names
     assert "tempus_cleanup" not in names
@@ -35,6 +39,11 @@ async def test_default_tool_surface_is_b2a_and_fail_closed(sandbox):
     payload = json.loads(response[0].text)
     assert payload["status"] == "error"
     assert payload["error"] == "TEMPUS_LEGACY_TOOL_DISABLED"
+
+    response = await call_tool("tempus_request_action", {})
+    payload = json.loads(response[0].text)
+    assert payload["status"] == "error"
+    assert payload["error"] == "TEMPUS_LOCAL_KEYFILE_TOOL_DISABLED"
 
 
 def test_validate_path(sandbox):
@@ -48,6 +57,7 @@ def test_validate_path(sandbox):
 @pytest.mark.asyncio
 async def test_mcp_b2a_workflow(sandbox, monkeypatch):
     monkeypatch.setattr(mcp_module, "TEMPUS_ADMIN_TOOLS", True)
+    monkeypatch.setattr(mcp_module, "TEMPUS_LOCAL_KEYFILE_TOOLS", True)
 
     for output in ["keys.json", "agent.keys.json", "executor.keys.json"]:
         response = await call_tool("tempus_gen_keys", {"output": output})
@@ -90,20 +100,46 @@ async def test_mcp_b2a_workflow(sandbox, monkeypatch):
     authorization_id = authorization["authorization"]["authorization_id"]
     action_id = authorization["authorization"]["action_id"]
 
-    outcome = json.dumps({
-        "schema_version": "tempus.action-outcome.v1",
-        "authorization_id": authorization_id,
-        "action_id": action_id,
-        "status": "SUCCEEDED",
-        "external_reference": "deploy-9182",
+    blocked_intent = json.dumps({
+        "schema_version": "tempus.action-intent.v1",
+        "tenant_id": "mcp-test",
+        "agent_id": agent_id,
+        "idempotency_key": "mcp-action-invalid-signature",
+        "action_type": "deploy",
+        "resource": "service/api",
+        "requested_at": time.time_ns() // 1_000,
     })
     response = await call_tool(
-        "tempus_commit_outcome",
+        "tempus_request_action_signed",
+        {
+            "db": "test.db",
+            "intent": blocked_intent,
+            "agent_id": agent_id,
+            "agent_signature": "00" * 64,
+        },
+    )
+    assert json.loads(response[0].text)["authorization"]["decision"] == "BLOCKED"
+
+    gate_id = json.loads((sandbox / "keys.json").read_text())["public_key"]
+    executor = TempusExecutor(
+        str(sandbox / "executor.db"),
+        str(sandbox / "executor.keys.json"),
+        gate_id,
+        "mcp-test",
+    )
+    executor.verify_and_consume_permit(json.dumps(authorization))
+    outcome = executor.complete_execution(
+        authorization_id,
+        action_id,
+        "SUCCEEDED",
+        json.dumps({"external_reference": "deploy-9182"}),
+    )
+    response = await call_tool(
+        "tempus_commit_outcome_signed",
         {
             "db": "test.db",
             "authorization_id": authorization_id,
             "outcome": outcome,
-            "executor_keyfile": "executor.keys.json",
         },
     )
     assert json.loads(response[0].text)["receipt"]["status"] == "SUCCEEDED"

@@ -1228,4 +1228,23 @@ impl TempusExecutor {
 
         Ok(outcome)
     }
+
+    pub fn mark_unknown(&self, authorization_id: String, reason: String) -> PyResult<String> {
+        self.inner
+            .mark_unknown(&authorization_id, &reason)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (older_than_seconds=0))]
+    pub fn recover_incomplete(&self, older_than_seconds: u64) -> PyResult<String> {
+        self.inner
+            .recover_incomplete(older_than_seconds)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    pub fn get_execution_state(&self, authorization_id: String) -> PyResult<String> {
+        self.inner
+            .get_execution_state(&authorization_id)
+            .map_err(PyRuntimeError::new_err)
+    }
 }

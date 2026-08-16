@@ -75,6 +75,19 @@ root and inspect history, but agents, the gate, and executors perform the runtim
   hash.
 - An identical retry returns the existing receipt.
 - A conflicting second outcome is rejected as an already-consumed permit.
+- The executor stores signed `STARTED`, `SUCCEEDED`, `FAILED`, or `UNKNOWN`
+  observations independently of the gate receipt.
+- Restart recovery marks abandoned `STARTED` executions `UNKNOWN`; it never retries an
+  external effect whose result is ambiguous.
+
+### GitHub credential isolation and exact binding
+
+- `tempus-github-executor` reads `GITHUB_TOKEN` only from the executor environment.
+- The permit is verified and consumed before the GitHub request is sent.
+- The outbound endpoint and JSON payload are derived exclusively from the signed
+  `action_type`, exact `owner/repository` resource, and allowlisted intent arguments.
+- Unsupported actions, resources, or extra fields produce a signed `FAILED` outcome
+  without contacting GitHub.
 
 ### MCP least privilege
 
@@ -84,26 +97,30 @@ trace reading, and registry reading. Separate environment flags are required for
 - `TEMPUS_ADMIN_TOOLS=1`: deployment-time provisioning.
 - `TEMPUS_LEGACY_TOOLS=1`: voluntary pre-B2A ledger methods.
 - `TEMPUS_DESTRUCTIVE_TOOLS=1`: demo cleanup.
+- `TEMPUS_LOCAL_KEYFILE_TOOLS=1`: development-only B2A tools that accept agent or
+  executor keyfile paths.
 
 The gate key path is server-controlled through `TEMPUS_GATE_KEYFILE`; an MCP client
-cannot select a different gate key per authorization request.
+cannot select a different gate key per authorization request. The default B2A MCP tools
+accept locally signed intent and outcome payloads, not private-key file paths.
 
 ## Threats and residual risk
 
 | Threat | Current control | Residual risk / required production control |
 |---|---|---|
-| Agent bypasses Tempus | Signed permit protocol | Still possible if the agent possesses downstream credentials. Move credentials into a mediated executor that requires the permit. |
+| Agent bypasses Tempus | GitHub credential is held by the packaged mediated executor | Deployment is bypassable if the same token is also exposed to the requesting agent. |
 | Agent forges identity | Ed25519 intent signature and signed registration | A stolen agent private key can impersonate that agent. Add KMS workload identity, rotation, and revocation. |
 | Client self-registers | Registration requires a delegation-capable gate key; admin MCP tools are disabled | Protect the separate provisioning process and gate key. Add explicit tenant-scoped delegation policies. |
 | Gate forges permits | Gate receipts identify and are signed by the gate | The gate is a trust root. Use KMS/HSM, key transparency, replicated audit, and external checkpoints. |
-| Replay or duplicate action | Deterministic action ID, idempotency uniqueness, permit expiry | A downstream adapter must also persist and enforce action/permit IDs. |
+| Replay or duplicate action | Gate idempotency plus atomic executor-side consumption | Multi-instance executors require shared transactional consumption state. |
+| Ambiguous GitHub result | Signed `UNKNOWN` observation and no automatic retry | An operator must reconcile the external GitHub state before deciding on a new action. |
 | Two conflicting outcomes | Unique authorization consumption | Distributed executors require transactional shared state or a consensus-backed permit store. |
 | Receipt modification | Canonical hashes and Ed25519 signatures | Metadata confidentiality is not provided; values are stored as plaintext JSON. |
 | Tail deletion or full database loss | None in local-only mode | Replicate append-only events and publish signed/Merkle checkpoints outside the host. |
 | Database rollback | Signatures preserve integrity of the restored snapshot | A valid older snapshot is not distinguishable locally. External monotonic checkpoints are required. |
 | Malicious policy supplied by agent | Current policy is fixed as `tempus.identity-gate.v1` | A future policy store must be gate-controlled, versioned, signed, and included in receipts. |
 | Key file theft | File permissions only | Plaintext keyfiles are development mode. Production must use KMS/HSM or workload identity. |
-| MCP path misuse | Paths are constrained to the configured sandbox | Current local MCP convenience flow accepts agent/executor keyfile paths. Remote transports must use signed payloads and never receive private keys. |
+| MCP path misuse | Default MCP tools accept only signed payloads; local keyfile tools are disabled | Development users can opt into `TEMPUS_LOCAL_KEYFILE_TOOLS=1` inside the configured sandbox. Production transports must keep this flag disabled. |
 | Sensitive payload disclosure | None | Store digests or encrypted evidence where raw inputs/outputs contain secrets or personal data. |
 | Financial abuse | Money uses the same signed envelope | Tempus does not provide custody, KYC/AML, sanctions controls, or transaction reversal. Financial executors must supply those controls. |
 
@@ -111,6 +128,7 @@ cannot select a different gate key per authorization request.
 
 - Authorization: `ALLOWED` or `BLOCKED`.
 - Execution: `SUCCEEDED` or `FAILED`.
+- Executor observation: `STARTED`, `SUCCEEDED`, `FAILED`, or `UNKNOWN`.
 - Trace verification: `VERIFIED` or `INVALID`.
 - Trace phase: `AUTHORIZED`, `COMPLETED`, `BLOCKED`, or `EXPIRED`.
 
@@ -121,6 +139,9 @@ is authentic and linked, not that the business operation succeeded.
 
 Tempus must not be described as an unavoidable production toll until all of the following
 are true:
+
+Gates 1 and 2 are satisfied for the packaged GitHub actions when the executor is the
+exclusive holder of `GITHUB_TOKEN`. The remaining gates apply to enterprise deployment.
 
 1. Downstream credentials are unavailable to requesting agents.
 2. Executors verify the full permit, policy version, expiry, and consumption state before

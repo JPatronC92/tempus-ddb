@@ -1,5 +1,7 @@
 """Test fixtures that remain reliable on restricted Windows workspaces."""
 
+import gc
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,4 +15,14 @@ def tmp_path(request):
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"{request.node.name}-{uuid4().hex}"
     path.mkdir()
-    return path
+    try:
+        yield path
+    finally:
+        gc.collect()
+        shutil.rmtree(path, ignore_errors=True)
+        try:
+            root.rmdir()
+            root.parent.rmdir()
+        except OSError:
+            # Parallel or still-open test resources may keep the shared root alive.
+            pass
