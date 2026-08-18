@@ -28,6 +28,8 @@ async def test_default_tool_surface_is_b2a_and_fail_closed(sandbox):
         "tempus_get_trace",
         "tempus_verify_trace",
         "tempus_list_agents",
+        "tempus_list_policies",
+        "tempus_list_identity_events",
     } <= names
     assert "tempus_request_action" not in names
     assert "tempus_commit_outcome" not in names

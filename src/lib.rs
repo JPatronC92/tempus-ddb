@@ -11,6 +11,9 @@ use wasm_bindgen::prelude::*;
 #[cfg(not(target_arch = "wasm32"))]
 mod b2a;
 
+#[cfg(not(target_arch = "wasm32"))]
+mod phase3;
+
 // --- 1. PATRÓN STORAGE LAYER (TRAIT) ---
 pub trait StorageLayer {
     fn insert_decision(&mut self, payload: &str, rules: &str, genesis: bool) -> Result<(), String>;
@@ -126,6 +129,7 @@ pub struct SqliteStorage {
     conn: Connection,
     keyfile: String,
     cached_signing_key: std::cell::RefCell<Option<ed25519_dalek::SigningKey>>,
+    cached_signer: std::cell::RefCell<Option<phase3::ConfiguredSigner>>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -174,6 +178,7 @@ impl SqliteStorage {
             conn,
             keyfile,
             cached_signing_key: std::cell::RefCell::new(None),
+            cached_signer: std::cell::RefCell::new(None),
         })
     }
 
@@ -208,6 +213,17 @@ impl SqliteStorage {
         let key = Self::load_signing_key_from_path(&self.keyfile)?;
         *self.cached_signing_key.borrow_mut() = Some(key.clone());
         Ok(key)
+    }
+
+    /// Load the configured signing backend. Local key files remain compatible, while
+    /// production deployments may point at a non-secret Vault Transit signer config.
+    pub(crate) fn load_signer(&self) -> Result<phase3::ConfiguredSigner, String> {
+        if let Some(ref signer) = *self.cached_signer.borrow() {
+            return Ok(signer.clone());
+        }
+        let signer = phase3::ConfiguredSigner::from_path(&self.keyfile)?;
+        *self.cached_signer.borrow_mut() = Some(signer.clone());
+        Ok(signer)
     }
 
     /// Compute the canonical SHA-256 hash for a decision (matches main.rs logic).
@@ -527,6 +543,25 @@ impl SqliteStorage {
         b2a::get_agent(self, public_key)
     }
 
+    /// Rotate an identity to a new Ed25519 verification key while retaining its stable ID.
+    pub fn rotate_agent(
+        &self,
+        current_public_key: &str,
+        new_public_key: &str,
+    ) -> Result<String, String> {
+        b2a::rotate_agent(self, current_public_key, new_public_key)
+    }
+
+    /// Revoke an active identity key and invalidate its unconsumed permits.
+    pub fn revoke_agent(&self, public_key: &str, reason: &str) -> Result<String, String> {
+        b2a::revoke_agent(self, public_key, reason)
+    }
+
+    /// List signed rotation and revocation events.
+    pub fn list_identity_events(&self) -> Result<String, String> {
+        b2a::list_identity_events(self)
+    }
+
     /// Ask the Tempus gate for a single-use authorization receipt.
     pub fn request_action(
         &self,
@@ -575,6 +610,25 @@ impl SqliteStorage {
     /// Cryptographically verify an action trace end to end.
     pub fn verify_trace(&self, action_id: &str) -> Result<String, String> {
         b2a::verify_trace(self, action_id)
+    }
+
+    /// Install and activate a deterministic policy bundle signed by the gate.
+    pub fn install_policy(&self, policy_spec: &str) -> Result<String, String> {
+        let spec: serde_json::Value = serde_json::from_str(policy_spec)
+            .map_err(|e| format!("Policy spec must be valid JSON: {e}"))?;
+        let signer = self.load_signer()?;
+        let bundle = phase3::install_policy(&self.conn, &signer, &spec, b2a::now_micros()?)?;
+        b2a::canonicalize(&bundle)
+    }
+
+    /// List active and retired policy bundles.
+    pub fn list_policies(&self) -> Result<String, String> {
+        phase3::list_policies(&self.conn)
+    }
+
+    /// Exercise the configured local or remote signer with an offline-verifiable fixture.
+    pub fn signer_conformance(&self) -> Result<String, String> {
+        phase3::signer_conformance(&self.load_signer()?)
     }
 }
 
@@ -887,9 +941,7 @@ impl TempusDDB {
             SqliteStorage::new(db_path, keyfile.clone()).map_err(PyPermissionError::new_err)?;
 
         if std::path::Path::new(&keyfile).exists() {
-            storage
-                .load_signing_key()
-                .map_err(PyPermissionError::new_err)?;
+            storage.load_signer().map_err(PyPermissionError::new_err)?;
         }
 
         Ok(TempusDDB { storage, keyfile })
@@ -980,6 +1032,27 @@ impl TempusDDB {
             .map_err(PyRuntimeError::new_err)
     }
 
+    #[pyo3(signature = (current_public_key, new_public_key))]
+    fn rotate_agent(&self, current_public_key: &str, new_public_key: &str) -> PyResult<String> {
+        self.storage
+            .rotate_agent(current_public_key, new_public_key)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (public_key, reason))]
+    fn revoke_agent(&self, public_key: &str, reason: &str) -> PyResult<String> {
+        self.storage
+            .revoke_agent(public_key, reason)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = ())]
+    fn list_identity_events(&self) -> PyResult<String> {
+        self.storage
+            .list_identity_events()
+            .map_err(PyRuntimeError::new_err)
+    }
+
     #[pyo3(signature = (public_key,))]
     fn verify_agent(&self, public_key: &str) -> PyResult<bool> {
         self.storage
@@ -1045,15 +1118,37 @@ impl TempusDDB {
             .map_err(PyRuntimeError::new_err)
     }
 
+    #[pyo3(signature = (policy_spec,))]
+    fn install_policy(&self, policy_spec: &str) -> PyResult<String> {
+        self.storage
+            .install_policy(policy_spec)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = ())]
+    fn list_policies(&self) -> PyResult<String> {
+        self.storage
+            .list_policies()
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = ())]
+    fn signer_conformance(&self) -> PyResult<String> {
+        self.storage
+            .signer_conformance()
+            .map_err(PyRuntimeError::new_err)
+    }
+
     /// Return the public key of the current keyfile ("who am I?").
     #[pyo3(signature = ())]
     fn whoami(&self) -> PyResult<String> {
-        let signing_key = self
+        let signer = self
             .storage
-            .load_signing_key()
+            .load_signer()
             .map_err(PyRuntimeError::new_err)?;
-        let verifying_key = signing_key.verifying_key();
-        let public_key = hex::encode(verifying_key.to_bytes());
+        use crate::phase3::SignerBackend;
+        let identity = signer.identity();
+        let public_key = identity.public_key.clone();
 
         // Try to find the agent alias
         let alias = match self.storage.get_agent(&public_key) {
@@ -1067,7 +1162,10 @@ impl TempusDDB {
         Ok(serde_json::to_string(&serde_json::json!({
             "public_key": public_key,
             "alias": alias,
-            "keyfile": self.keyfile
+            "keyfile": self.keyfile,
+            "signer_uri": identity.signer_uri,
+            "key_version": identity.key_version,
+            "algorithm": identity.algorithm,
         }))
         .unwrap())
     }

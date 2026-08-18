@@ -1,9 +1,8 @@
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use crate::phase3::{ConfiguredSigner, SignerBackend};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::fs;
-use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub trait ExecutorStorage {
@@ -217,7 +216,7 @@ fn now_micros() -> Result<u64, String> {
 
 pub struct MediatedExecutor {
     storage: Box<dyn ExecutorStorage + Send>,
-    keypair: SigningKey,
+    signer: ConfiguredSigner,
     trusted_gate_id: String,
     trusted_tenant_id: String,
 }
@@ -229,30 +228,18 @@ impl MediatedExecutor {
         trusted_gate_id: &str,
         trusted_tenant_id: &str,
     ) -> Result<Self, String> {
-        let keypair = Self::load_keypair(keyfile)?;
+        let signer = ConfiguredSigner::from_path(keyfile)?;
         storage.initialize()?;
         Ok(Self {
             storage,
-            keypair,
+            signer,
             trusted_gate_id: trusted_gate_id.to_string(),
             trusted_tenant_id: trusted_tenant_id.to_string(),
         })
     }
 
-    fn load_keypair(path: &str) -> Result<SigningKey, String> {
-        let content = fs::read_to_string(Path::new(path)).map_err(|e| e.to_string())?;
-        let parsed: Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-        let sk_hex = parsed
-            .get("private_key")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing private_key in keyfile")?;
-        let mut sk_bytes = [0u8; 32];
-        hex::decode_to_slice(sk_hex, &mut sk_bytes).map_err(|e| e.to_string())?;
-        Ok(SigningKey::from_bytes(&sk_bytes))
-    }
-
     fn executor_id(&self) -> String {
-        hex::encode(self.keypair.verifying_key().as_bytes())
+        self.signer.identity().public_key.clone()
     }
 
     fn sign_observation(
@@ -272,8 +259,7 @@ impl MediatedExecutor {
             "details": details,
         });
         let canonical = crate::b2a::canonicalize(&observation)?;
-        let signature = self.keypair.sign(canonical.as_bytes());
-        observation["executor_signature"] = json!(hex::encode(signature.to_bytes()));
+        observation["executor_signature"] = json!(self.signer.sign(canonical.as_bytes())?);
         crate::b2a::canonicalize(&observation)
     }
 
@@ -337,10 +323,18 @@ impl MediatedExecutor {
         if authorization.get("decision").and_then(|v| v.as_str()) != Some("ALLOWED") {
             return Err("Permit is not ALLOWED".to_string());
         }
-        if authorization.get("policy_version").and_then(|v| v.as_str())
-            != Some(crate::b2a::POLICY_VERSION)
+        let policy_bundle = permit
+            .get("policy_bundle")
+            .ok_or("Missing signed policy bundle")?;
+        crate::phase3::verify_policy_bundle(policy_bundle, Some(gate_id_hex))
+            .map_err(|error| format!("Invalid policy bundle: {error}"))?;
+        if authorization.get("policy_version") != policy_bundle.get("policy_version")
+            || authorization.get("policy_digest") != policy_bundle.get("policy_digest")
         {
-            return Err("Unsupported policy version".to_string());
+            return Err("Authorization policy binding mismatch".to_string());
+        }
+        if !crate::phase3::executor_allowed(policy_bundle, &self.executor_id())? {
+            return Err("Executor is denied by policy".to_string());
         }
 
         let canonical_intent = crate::b2a::canonicalize(intent)?;
@@ -360,6 +354,20 @@ impl MediatedExecutor {
         if now_micros()? > expires_at {
             return Err("Permit has expired".to_string());
         }
+        let issued_at = authorization
+            .get("issued_at")
+            .and_then(|value| value.as_u64())
+            .ok_or("Missing issued_at")?;
+        let ttl_seconds = expires_at.saturating_sub(issued_at) / 1_000_000;
+        let policy_decision = crate::phase3::evaluate_policy(policy_bundle, intent, ttl_seconds)?;
+        if policy_decision.decision != "ALLOWED"
+            || authorization.get("evidence_digest").and_then(Value::as_str)
+                != Some(policy_decision.evidence_digest.as_str())
+            || authorization.get("executor_constraints")
+                != Some(&policy_decision.executor_constraints)
+        {
+            return Err("Policy evidence is not reproducible".to_string());
+        }
 
         let action_id = authorization
             .get("action_id")
@@ -369,7 +377,10 @@ impl MediatedExecutor {
             authorization_id,
             action_id,
             "STARTED",
-            json!({"policy_version": crate::b2a::POLICY_VERSION}),
+            json!({
+                "policy_version": authorization.get("policy_version"),
+                "policy_digest": authorization.get("policy_digest"),
+            }),
         )?;
         self.storage
             .start_consumption(authorization_id, action_id, &started)?;
@@ -405,8 +416,7 @@ impl MediatedExecutor {
         });
         let canonical_outcome = crate::b2a::canonicalize(&outcome)
             .map_err(|e| format!("Failed to canonicalize outcome: {e}"))?;
-        let signature = self.keypair.sign(canonical_outcome.as_bytes());
-        outcome["executor_signature"] = json!(hex::encode(signature.to_bytes()));
+        outcome["executor_signature"] = json!(self.signer.sign(canonical_outcome.as_bytes())?);
 
         let final_outcome = crate::b2a::canonicalize(&outcome)
             .map_err(|e| format!("Failed to serialize final outcome: {e}"))?;
@@ -488,11 +498,13 @@ impl MediatedExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
     use rand::rngs::OsRng;
+    use std::fs;
     use tempfile::tempdir;
 
     #[test]
-    fn executor_rejects_a_gate_signed_unknown_policy_version() {
+    fn executor_rejects_a_gate_signed_permit_without_policy_bundle() {
         let temp = tempdir().unwrap();
         let executor_key = SigningKey::generate(&mut OsRng);
         let executor_keyfile = temp.path().join("executor.keys.json");
@@ -559,7 +571,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             executor.verify_and_consume_permit(&permit).unwrap_err(),
-            "Unsupported policy version"
+            "Missing signed policy bundle"
         );
     }
 }

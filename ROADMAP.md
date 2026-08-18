@@ -1,9 +1,8 @@
 # Tempus DDB public roadmap
 
-Tempus DDB is a public-alpha candidate at `0.3.0`. Phase 2 is complete for a
-single-instance GitHub executor that creates issues and pull requests. The next logical
-step is not broad adapter growth or horizontal scale: it is making policy, identity
-lifecycle, and production signing explicit enough that teams can trust the gate.
+Tempus DDB `0.4.0` implements the Phase 3 design-partner beta boundary on top of the
+single-instance GitHub executor. Policy, identity lifecycle, and production signing are
+now explicit protocol components. Horizontal durability remains Phase 4 work.
 
 This roadmap separates protocol maturity from adoption. A milestone is complete only
 when its exit criteria are tested and documented in the source tree.
@@ -27,54 +26,60 @@ when its exit criteria are tested and documented in the source tree.
 
 ## Phase 3 — Policy and production identity
 
+Implementation status: **complete in the source tree**. Offline and local exit criteria
+are covered by automated tests. Hosted GitHub Actions and live opt-in Vault/GitHub
+verification are explicitly pending while the repository account has a runner billing
+restriction; this external validation debt does not change the fail-closed runtime path.
+
 ### 3.1 Signer and verifier boundary
 
-- Define a Rust signer interface and verification-key resolver.
-- Record signer URI, key version, and algorithm without exposing provider credentials.
-- Preserve Ed25519 verification for every v1 receipt.
-- Add offline provider-conformance fixtures.
+- [x] Define a Rust signer interface and verification-key resolver.
+- [x] Record signer URI, key version, and algorithm without exposing provider credentials.
+- [x] Preserve Ed25519 verification for every v1 receipt.
+- [x] Add offline provider-conformance fixtures.
 
 Exit: the local file signer and a test remote signer pass the same contract suite, and
 an unknown signer or algorithm fails closed.
 
 ### 3.2 Deterministic policy bundles
 
-- Replace the hard-coded `baseline-v1` marker with signed, versioned policy bundles.
-- Bind policy digest, evidence digest, and closed decision reason codes into permits.
-- Cover resource, tenant, input, optional money metadata, TTL, and executor constraints.
-- Reject unknown policy versions and non-deterministic inputs.
+- [x] Replace the hard-coded policy marker with signed, versioned policy bundles.
+- [x] Bind policy digest, evidence digest, and closed decision reason codes into permits.
+- [x] Cover resource, tenant, input, optional money metadata, TTL, and executor constraints.
+- [x] Reject unknown policy versions and non-deterministic numeric inputs.
 
 Exit: a reviewer can reproduce every allow/block decision from the signed evidence.
 
 ### 3.3 Identity lifecycle
 
-- Add tenant-scoped delegation capabilities.
-- Add signed agent and executor rotation and revocation events.
-- Resolve the key valid at signing time so historical receipts remain verifiable.
-- Define emergency revocation behavior for unconsumed permits.
+- [x] Add tenant-scoped delegation capabilities.
+- [x] Add signed agent and executor rotation and revocation events.
+- [x] Resolve the key valid at signing time so historical receipts remain verifiable.
+- [x] Invalidate unconsumed permits on emergency revocation.
 
 Exit: rotation and revocation adversarial tests pass without invalidating historical
 receipts.
 
 ### 3.4 Workload identity and first production signer
 
-- Authenticate the gate and executor through workload identity instead of static service
+- [x] Authenticate the gate and executor through workload identity instead of static service
   credentials.
-- Select the first Vault/KMS/HSM integration by demonstrated algorithm and operational
-  compatibility.
-- Introduce a new contract version before using a provider that cannot sign Ed25519.
-- Document availability, timeout, retry, and audit behavior for the provider.
+- [x] Integrate Vault Transit as the first provider based on Ed25519 compatibility and
+  operational isolation.
+- [x] Keep v1 on Ed25519 and require a new contract version before using a provider that
+  cannot sign it.
+- [x] Document availability, timeout, bounded retry, key-version, and audit behavior.
 
 Exit: no production private key is stored in a plaintext file, signer outages fail
 closed, and integration tests run only through explicit opt-in credentials.
 
 ### 3.5 Operational readiness
 
-- Add `tempus doctor` for configuration, permissions, clock, database, gate identity, and
+- [x] Add `tempus doctor` for configuration, permissions, clock, database, gate identity, and
   executor connectivity checks.
-- Publish a machine-readable conformance suite for adapters.
-- Produce an SBOM and signed release provenance.
-- Define compatibility and deprecation policy for schemas, CLI, Python, and MCP tools.
+- [x] Publish a machine-readable conformance suite for adapters.
+- [x] Produce an SPDX SBOM and configure signed release provenance/SBOM attestations.
+- [x] Define compatibility and deprecation policy for schemas, CLI, Python, and MCP tools.
 
 Exit: a clean environment reaches a verified GitHub effect through documented commands
 without editing source code.
@@ -91,12 +96,12 @@ without editing source code.
 
 ### Design-partner beta (`0.4.x`)
 
-- Deliver Phase 3.1–3.3 and the first production signer.
-- Package a least-privilege GitHub App deployment path instead of relying only on a
+- [x] Deliver Phase 3.1–3.3 and the first production signer.
+- [ ] Package a least-privilege GitHub App deployment path instead of relying only on a
   personal access token.
-- Publish adapter conformance fixtures and a second adapter only after the GitHub path is
-  repeatable.
-- Provide migration notes and a documented support window for every contract change.
+- [x] Publish adapter conformance fixtures.
+- [ ] Add a second adapter only after the GitHub path is repeatable.
+- [x] Provide migration notes and a documented support window for every contract change.
 
 ### General availability (`1.0`)
 

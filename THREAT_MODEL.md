@@ -109,17 +109,17 @@ accept locally signed intent and outcome payloads, not private-key file paths.
 | Threat | Current control | Residual risk / required production control |
 |---|---|---|
 | Agent bypasses Tempus | GitHub credential is held by the packaged mediated executor | Deployment is bypassable if the same token is also exposed to the requesting agent. |
-| Agent forges identity | Ed25519 intent signature and signed registration | A stolen agent private key can impersonate that agent. Add KMS workload identity, rotation, and revocation. |
-| Client self-registers | Registration requires a delegation-capable gate key; admin MCP tools are disabled | Protect the separate provisioning process and gate key. Add explicit tenant-scoped delegation policies. |
-| Gate forges permits | Gate receipts identify and are signed by the gate | The gate is a trust root. Use KMS/HSM, key transparency, replicated audit, and external checkpoints. |
+| Agent forges identity | Ed25519 signature, signed registration, tenant scope, rotation, and revocation | A stolen active key can impersonate that agent until revocation reaches every executor. Production identities should use the Vault/workload signer path. |
+| Client self-registers | Registration requires a delegation-capable signer in the same tenant scope; admin MCP tools are disabled | Protect the separate provisioning process and delegation root. |
+| Gate forges permits | Gate receipts identify the signer URI/key version and are signed locally or through Vault Transit | The gate remains a trust root. Add key transparency, replicated audit, and external checkpoints. |
 | Replay or duplicate action | Gate idempotency plus atomic executor-side consumption | Multi-instance executors require shared transactional consumption state. |
 | Ambiguous GitHub result | Signed `UNKNOWN` observation and no automatic retry | An operator must reconcile the external GitHub state before deciding on a new action. |
 | Two conflicting outcomes | Unique authorization consumption | Distributed executors require transactional shared state or a consensus-backed permit store. |
 | Receipt modification | Canonical hashes and Ed25519 signatures | Metadata confidentiality is not provided; values are stored as plaintext JSON. |
 | Tail deletion or full database loss | None in local-only mode | Replicate append-only events and publish signed/Merkle checkpoints outside the host. |
 | Database rollback | Signatures preserve integrity of the restored snapshot | A valid older snapshot is not distinguishable locally. External monotonic checkpoints are required. |
-| Malicious policy supplied by agent | Current policy is fixed as `tempus.identity-gate.v1` | A future policy store must be gate-controlled, versioned, signed, and included in receipts. |
-| Key file theft | File permissions only | Plaintext keyfiles are development mode. Production must use KMS/HSM or workload identity. |
+| Malicious or altered policy | Gate-controlled policy bundles are signed and embedded by digest; evidence is reproduced by the executor | A compromised delegation root can install a malicious policy. Separate provisioning authority and monitor policy events. |
+| Key file theft | Plaintext files are development-only; gate and executor accept a Vault Transit signer config with no private key | Vault workload authentication and policy remain operator responsibilities. |
 | MCP path misuse | Default MCP tools accept only signed payloads; local keyfile tools are disabled | Development users can opt into `TEMPUS_LOCAL_KEYFILE_TOOLS=1` inside the configured sandbox. Production transports must keep this flag disabled. |
 | Sensitive payload disclosure | None | Store digests or encrypted evidence where raw inputs/outputs contain secrets or personal data. |
 | Financial abuse | Money uses the same signed envelope | Tempus does not provide custody, KYC/AML, sanctions controls, or transaction reversal. Financial executors must supply those controls. |
@@ -140,8 +140,9 @@ is authentic and linked, not that the business operation succeeded.
 Tempus must not be described as an unavoidable production toll until all of the following
 are true:
 
-Gates 1 and 2 are satisfied for the packaged GitHub actions when the executor is the
-exclusive holder of `GITHUB_TOKEN`. The remaining gates apply to enterprise deployment.
+The source tree implements gates 1–4, 6, and 8. Their production validity still depends
+on using exclusive downstream credentials, the Vault/workload signer configuration, and
+a separately protected provisioning process. Gate 5 remains Phase 4 work.
 
 1. Downstream credentials are unavailable to requesting agents.
 2. Executors verify the full permit, policy version, expiry, and consumption state before
@@ -163,6 +164,7 @@ exclusive holder of `GITHUB_TOKEN`. The remaining gates apply to enterprise depl
 - Human approval workflows.
 - Cloud synchronization and external anchoring.
 - A read-only web audit console.
-- General domain policy evaluation beyond identity, signature, TTL, and replay checks.
+- Arbitrary policy languages beyond the deterministic tenant, resource, action, input,
+  money, TTL, and executor constraints in `tempus.policy-bundle.v1`.
 
 These are roadmap items, not current security claims.

@@ -30,7 +30,7 @@ def run_cli(args, cwd=None):
 def test_cli_version():
     code, out, _ = run_cli(["--version"])
     assert code == 0
-    assert out.strip() == "tempus 0.3.0"
+    assert out.strip() == "tempus 0.4.0"
 
 
 def test_cli_help():
@@ -235,3 +235,64 @@ def test_cli_b2a_authorization_execution_flow(tmp_path):
     verification = json.loads(out)
     assert verification["status"] == "VERIFIED"
     assert verification["phase"] == "COMPLETED"
+
+
+def test_cli_phase3_doctor_conformance_policy_and_identity_lifecycle(tmp_path):
+    code, out, err = run_cli(["init"], cwd=tmp_path)
+    assert code == 0, out + err
+
+    code, out, err = run_cli(["doctor", "--json"], cwd=tmp_path)
+    assert code == 0, out + err
+    assert json.loads(out)["status"] == "PASS"
+
+    code, out, err = run_cli(["conformance", "--signer"], cwd=tmp_path)
+    assert code == 0, out + err
+    conformance = json.loads(out)
+    assert conformance["status"] == "PASS"
+    assert conformance["signer"]["checks"]["exact_bytes"] == "PASS"
+
+    code, out, err = run_cli(["list-policies"], cwd=tmp_path)
+    assert code == 0, out + err
+    policies = json.loads(out)
+    assert policies[0]["schema_version"] == "tempus.policy-bundle.v1"
+    assert policies[0]["status"] == "ACTIVE"
+
+    for filename in ["agent-v1.keys.json", "agent-v2.keys.json"]:
+        code, out, err = run_cli(["keygen", "--output", filename], cwd=tmp_path)
+        assert code == 0, out + err
+    agent_v1 = json.loads((tmp_path / "agent-v1.keys.json").read_text())["public_key"]
+    agent_v2 = json.loads((tmp_path / "agent-v2.keys.json").read_text())["public_key"]
+    code, out, err = run_cli(
+        [
+            "register-agent",
+            "--alias",
+            "phase3-agent",
+            "--agent-keyfile",
+            "agent-v1.keys.json",
+            "--metadata",
+            '{"tenant_id":"acme"}',
+        ],
+        cwd=tmp_path,
+    )
+    assert code == 0, out + err
+    code, out, err = run_cli(
+        [
+            "rotate-agent",
+            "--current-public-key",
+            agent_v1,
+            "--new-keyfile",
+            "agent-v2.keys.json",
+        ],
+        cwd=tmp_path,
+    )
+    assert code == 0, out + err
+    assert json.loads(out)["event"]["event_type"] == "ROTATE"
+    code, out, err = run_cli(
+        ["revoke-agent", "--public-key", agent_v2, "--reason", "test revocation"],
+        cwd=tmp_path,
+    )
+    assert code == 0, out + err
+    assert json.loads(out)["event"]["event_type"] == "REVOKE"
+    code, out, err = run_cli(["identity-events"], cwd=tmp_path)
+    assert code == 0, out + err
+    assert len(json.loads(out)) == 2

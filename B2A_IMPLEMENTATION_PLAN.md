@@ -139,7 +139,9 @@ Exit gate:
 
 ### Phase 3 — Policy, delegation, and workload identity
 
-Status: planned.
+Status: implemented in `0.4.0`. Local and offline exit gates are automated. Live
+credentialed Vault/GitHub validation remains opt-in and is currently deferred because
+the GitHub-hosted runner cannot start while the repository account has a billing block.
 
 Implementation order:
 

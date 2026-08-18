@@ -1,7 +1,7 @@
 # 🚀 Plan de Escalabilidad y Hoja de Ruta Enterprise: Tempus DDB
 
 **Proyecto:** Tempus DDB — Infraestructura de Seguridad B2A (Business-to-Agent & Agent-to-Agent)  
-**Versión Actual:** v0.3.0 (Local B2A gate; Phase 2 implemented for GitHub)
+**Versión Actual:** v0.4.0 (Phase 3 policy and production identity implemented)
 **Objetivo:** Transición de Ledger Local a Plataforma Distribuida de Alta Disponibilidad y Seguridad Enterprise.
 
 ---
@@ -83,19 +83,19 @@ no forman parte del criterio de cierre de la Fase 2 enfocada en GitHub.
 ### 📍 Fase 3: Identidad Enterprise, KMS y Gestión de Llaves
 *Objetivo: hacer explícitas la política, la identidad y la firma de producción antes de escalar horizontalmente.*
 
-- [ ] **Abstracción de firma y resolución de llaves:**
+- [x] **Abstracción de firma y resolución de llaves:**
   - Trait estable para firmantes locales y remotos, con URI del firmante, versión de llave y algoritmo.
   - Mantener Ed25519 para contratos v1 y añadir agilidad criptográfica sólo mediante una nueva versión de contrato.
-- [ ] **Política determinista firmada:**
+- [x] **Política determinista firmada:**
   - Sustituir `baseline-v1` por bundles versionados y firmados por el gate.
   - Incluir razón de decisión, digest de política y digest de evidencia en cada permiso.
-- [ ] **Revocación, rotación y delegación por tenant:**
+- [x] **Revocación, rotación y delegación por tenant:**
   - Registrar eventos firmados de ciclo de vida para agentes y ejecutores.
   - Resolver la llave válida en el instante de firma para conservar la verificación histórica.
-- [ ] **Workload Identity y primer proveedor de producción:**
-  - Autenticar gate y ejecutores mediante OIDC/IAM o SPIFFE, sin secretos estáticos del servicio.
-  - Seleccionar el primer Vault/KMS/HSM por compatibilidad criptográfica demostrada, no sólo por marca del proveedor.
-  - Ejecutar fixtures de conformidad offline y pruebas de integración opt-in con credenciales externas.
+- [x] **Workload Identity y primer proveedor de producción:**
+  - Gate y ejecutores comparten el backend Vault Transit CLI y heredan la sesión de corta duración entregada a la workload; Tempus no almacena la llave privada ni el token.
+  - Vault Transit fue seleccionado por compatibilidad Ed25519 demostrada y verificación local de cada respuesta.
+  - Los fixtures offline están automatizados; la integración opt-in con credenciales externas queda pendiente de ejecución por la restricción de billing de GitHub Actions.
 
 El orden de entrega y los hitos de adopción están en [ROADMAP.md](ROADMAP.md).
 
