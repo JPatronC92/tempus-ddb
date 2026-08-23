@@ -94,12 +94,14 @@ class GitHubExecutorAdapter:
         token: Optional[str] = None,
         api_url: str = "https://api.github.com",
         transport: Optional[GitHubTransport] = None,
+        executor_pool_size: int = 8,
     ):
         self._executor = TempusExecutor(
             executor_db,
             executor_keyfile,
             trusted_gate_id,
             trusted_tenant_id,
+            executor_pool_size,
         )
         self._token = token or os.environ.get("GITHUB_TOKEN", "")
         if not self._token:
@@ -276,6 +278,12 @@ def main() -> None:
     parser.add_argument("--tenant-id", required=True)
     parser.add_argument("--token-env", default="GITHUB_TOKEN")
     parser.add_argument("--api-url", default="https://api.github.com")
+    parser.add_argument(
+        "--executor-pool-size",
+        type=int,
+        default=8,
+        help="Maximum pooled SQLite connections (default: 8)",
+    )
     args = parser.parse_args()
 
     token = os.environ.get(args.token_env, "")
@@ -287,6 +295,7 @@ def main() -> None:
             args.tenant_id,
             token=token,
             api_url=args.api_url,
+            executor_pool_size=args.executor_pool_size,
         )
         print(adapter.execute(_read_permit(args.permit)))
     except UnknownExecutionError as exc:

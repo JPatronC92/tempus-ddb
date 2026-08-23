@@ -1,63 +1,64 @@
 # Contributing to Tempus DDB
 
-Thank you for your interest in contributing to Tempus DDB!
+Tempus DDB is a security boundary for autonomous actions. Contributions are welcome, but
+changes to signed contracts, authorization decisions, identity lifecycle, or executor
+state require stronger evidence than ordinary feature work.
 
-## Code of Conduct
+By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-We are committed to providing a friendly, safe and welcoming environment for all.
+## Before opening a change
 
-## How to Contribute
+- Use an issue or [GitHub Discussion](https://github.com/JPatronC92/tempus-ddb/discussions)
+  for changes that alter a public contract or trust boundary.
+- Report suspected vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+- Keep pull requests focused. Large protocol changes should be split into reviewable,
+  independently testable steps.
 
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feat/amazing-feature`).
-3. Make your changes.
-4. Ensure tests pass (`pytest tests/` and `cargo test`).
-5. Commit your changes (`git commit -m 'Add some amazing feature'`).
-6. Push to the branch.
-7. Open a Pull Request.
+## Development setup
 
-## Development Setup
+Python 3.10 or newer and a stable Rust toolchain are required.
 
 ```bash
 git clone https://github.com/JPatronC92/tempus-ddb.git
 cd tempus-ddb
 python -m venv .venv
-python -m pip install -e .[dev]
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 ```
 
-Python 3.10 or newer and a stable Rust toolchain are required.
+## Required validation
 
-## Testing
-
-Run the same core checks enforced by CI:
+Run the same local gate used by CI:
 
 ```bash
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test --all-targets
+cargo audit
 ruff check .
 pytest -p no:cacheprovider
+python -m maturin build
 ```
 
-Tests and examples must use temporary workspaces. Do not commit databases, keys,
+Tests and examples must use temporary workspaces. Never commit databases, generated keys,
 credentials, logs, caches, wheels, or build output.
 
-## Pull Request Guidelines
+## Security and compatibility expectations
 
-- Keep PRs focused.
-- Update documentation if needed.
-- Add tests for new functionality.
-- Preserve fail-closed behavior for unknown schema, policy, and execution states.
-- Update `CHANGELOG.md` for user-visible changes.
+- Preserve fail-closed behavior for unknown schema, policy, identity, signer, and
+  execution states.
+- Add an adversarial regression test for changes to replay prevention, signature
+  verification, policy evaluation, credential isolation, or recovery.
+- Treat signed JSON fields and machine status values as public contracts. Follow
+  [COMPATIBILITY.md](COMPATIBILITY.md) before changing them.
+- Do not add network telemetry or credential-bearing payloads by default.
+- Update [THREAT_MODEL.md](THREAT_MODEL.md) when a trust boundary changes.
+- Update [CHANGELOG.md](CHANGELOG.md) for user-visible behavior.
 
-## Security Changes
+## Pull requests
 
-Do not open a public issue for a suspected vulnerability. Follow
-[SECURITY.md](SECURITY.md). Security-sensitive pull requests should document the trust
-boundary they change and include an adversarial regression test.
+Describe the problem, the chosen approach, security and compatibility impact, and exact
+validation performed. Link the relevant issue with `Fixes #<number>` when applicable.
 
-## Questions?
-
-Open an issue or discussion.
-
-Thank you!
+Use clear commit subjects such as `feat:`, `fix:`, `docs:`, `test:`, or `chore:`. A
+maintainer may squash a pull request when merging.

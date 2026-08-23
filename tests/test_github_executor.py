@@ -89,7 +89,19 @@ def build_adapter(environment, transport):
         token="executor-only-token",
         api_url="https://api.github.test",
         transport=transport,
+        executor_pool_size=2,
     )
+
+
+def test_executor_pool_size_must_be_positive(execution_environment):
+    with pytest.raises(RuntimeError, match="pool size must be greater than zero"):
+        TempusExecutor(
+            str(execution_environment["tmp_path"] / "invalid-pool.db"),
+            str(execution_environment["executor_keyfile"]),
+            execution_environment["gate_id"],
+            "github-test",
+            0,
+        )
 
 
 def test_github_issue_executes_exact_signed_arguments_and_replay_is_blocked(

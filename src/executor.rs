@@ -1,9 +1,13 @@
 use crate::phase3::{ConfiguredSigner, SignerBackend};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use rusqlite::{params, Connection, OptionalExtension};
+use r2d2::{Pool, PooledConnection};
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::{params, OptionalExtension};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+const SQLITE_BUSY_TIMEOUT_MS: u64 = 5_000;
 
 pub trait ExecutorStorage {
     fn initialize(&self) -> Result<(), String>;
@@ -36,26 +40,37 @@ pub struct ExecutionState {
     pub observation: String,
 }
 
+#[derive(Clone)]
 pub struct SqliteExecutorStorage {
-    db_path: String,
+    pool: Pool<SqliteConnectionManager>,
 }
 
 impl SqliteExecutorStorage {
-    pub fn new(db_path: &str) -> Self {
-        Self {
-            db_path: db_path.to_string(),
+    pub fn with_pool_size(db_path: &str, max_size: u32) -> Result<Self, String> {
+        if max_size == 0 {
+            return Err("Executor SQLite pool size must be greater than zero".to_string());
         }
+
+        let manager = SqliteConnectionManager::file(db_path).with_init(|conn| {
+            conn.execute_batch(
+                "PRAGMA journal_mode = WAL;
+                 PRAGMA synchronous = NORMAL;
+                 PRAGMA busy_timeout = 5000;",
+            )
+        });
+        let pool = Pool::builder()
+            .max_size(max_size)
+            .connection_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))
+            .build(manager)
+            .map_err(|error| format!("Failed to initialize executor SQLite pool: {error}"))?;
+
+        Ok(Self { pool })
     }
 
-    fn get_connection(&self) -> Result<Connection, String> {
-        let conn = Connection::open(&self.db_path).map_err(|e| e.to_string())?;
-        conn.execute_batch(
-            "PRAGMA journal_mode = WAL;
-             PRAGMA synchronous = NORMAL;
-             PRAGMA busy_timeout = 5000;",
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(conn)
+    fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
+        self.pool
+            .get()
+            .map_err(|error| format!("Failed to acquire executor SQLite connection: {error}"))
     }
 }
 
@@ -71,7 +86,13 @@ impl ExecutorStorage for SqliteExecutorStorage {
                 completed_at INTEGER,
                 outcome TEXT,
                 observation_json TEXT NOT NULL DEFAULT '{}'
-            );",
+             );",
+        )
+        .map_err(|e| e.to_string())?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_consumed_permits_recovery
+             ON consumed_permits (status, started_at);",
+            [],
         )
         .map_err(|e| e.to_string())?;
         if let Err(error) = conn.execute(
@@ -501,7 +522,54 @@ mod tests {
     use ed25519_dalek::{Signer, SigningKey};
     use rand::rngs::OsRng;
     use std::fs;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
     use tempfile::tempdir;
+
+    #[test]
+    fn executor_pool_allows_exactly_one_concurrent_permit_consumption() {
+        const CONTENDERS: usize = 16;
+
+        let temp = tempdir().unwrap();
+        let storage = Arc::new(
+            SqliteExecutorStorage::with_pool_size(
+                temp.path().join("executor.db").to_str().unwrap(),
+                4,
+            )
+            .unwrap(),
+        );
+        storage.initialize().unwrap();
+        let barrier = Arc::new(Barrier::new(CONTENDERS));
+
+        let handles = (0..CONTENDERS)
+            .map(|_| {
+                let storage = Arc::clone(&storage);
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    barrier.wait();
+                    storage.start_consumption(
+                        "shared-authorization",
+                        "shared-action",
+                        r#"{"status":"STARTED"}"#,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let results = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert!(results
+            .iter()
+            .filter_map(|result| result.as_ref().err())
+            .all(|error| error == "Permit already consumed or action ID re-used"));
+
+        let state = storage.get_state("shared-authorization").unwrap().unwrap();
+        assert_eq!(state.status, "STARTED");
+        assert_eq!(state.action_id, "shared-action");
+    }
 
     #[test]
     fn executor_rejects_a_gate_signed_permit_without_policy_bundle() {
@@ -561,9 +629,13 @@ mod tests {
         .unwrap();
 
         let executor = MediatedExecutor::new(
-            Box::new(SqliteExecutorStorage::new(
-                temp.path().join("executor.db").to_str().unwrap(),
-            )),
+            Box::new(
+                SqliteExecutorStorage::with_pool_size(
+                    temp.path().join("executor.db").to_str().unwrap(),
+                    8,
+                )
+                .unwrap(),
+            ),
             executor_keyfile.to_str().unwrap(),
             &gate_id,
             "test-tenant",

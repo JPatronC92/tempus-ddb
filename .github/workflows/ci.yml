@@ -3,6 +3,10 @@ name: CI
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -12,6 +16,7 @@ on:
 jobs:
   rust:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +51,7 @@ jobs:
 
   python:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     env:
       PYTHONIOENCODING: utf-8
     strategy:

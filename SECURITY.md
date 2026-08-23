@@ -4,11 +4,12 @@
 
 | Version | Status |
 |---|---|
-| `0.4.x` | Current design-partner beta line |
+| `0.4.x` | Current beta source line |
 | `0.3.x` | Critical fixes only until `0.5.0` |
 | `< 0.3` | Security fixes are not guaranteed |
 
-Until `0.4.0` is released, the current source tree is the supported beta candidate.
+No stable release has been published yet. Security fixes are developed on `main` and
+will be included in the next tagged beta.
 
 ## Reporting a Vulnerability
 

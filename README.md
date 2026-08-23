@@ -8,9 +8,9 @@
 Local-first · Signed policy · Workload identity · Fail-closed receipts · MCP-native
 </div>
 
-> **Status: design-partner beta (`0.4.0`).** Phase 3 policy, identity lifecycle, and
-> Vault-backed signing are implemented. Distributed durability and independent external
-> checkpoints remain Phase 4 work.
+> **Status: beta (`0.4.0` source line).** Signed policy, identity lifecycle,
+> Vault-backed signing, and the single-instance GitHub executor are implemented.
+> Distributed permit consumption and independent external checkpoints are not.
 >
 > [Roadmap](ROADMAP.md) · [Security](SECURITY.md) ·
 > [Threat model](THREAT_MODEL.md) · [Contributing](CONTRIBUTING.md)
@@ -23,12 +23,11 @@ humans only inspect the resulting history.
 > **Product invariant:** no Tempus permit, no effect; every effect produces a verifiable
 > receipt.
 
-The `0.4.0` source tree implements the complete local permit protocol, signed policy
+The `0.4.0` source tree implements the local permit protocol, signed policy
 bundles, rotation and revocation, a generic mediated executor, Vault Transit signing,
 and a packaged credential-isolated GitHub REST adapter. It does **not** yet include
-distributed permit consumption, external checkpoints, or a web audit console. See
-[B2A_IMPLEMENTATION_PLAN.md](B2A_IMPLEMENTATION_PLAN.md)
-and [THREAT_MODEL.md](THREAT_MODEL.md) for the exact boundary.
+distributed permit consumption, external checkpoints, or a web audit console. Read
+[THREAT_MODEL.md](THREAT_MODEL.md) before relying on the current security boundary.
 
 ## What is implemented
 
@@ -90,15 +89,16 @@ cannot read the executor's environment or key material.
 
 Python 3.10 or newer is required.
 
-```bash
-pip install tempus-ddb
-```
-
-Development checkout:
+The first packaged release has not been published to PyPI. Install the current source
+from a reviewed commit:
 
 ```bash
-python -m pip install -e .
+git clone https://github.com/JPatronC92/tempus-ddb.git
+cd tempus-ddb
+python -m pip install .
 ```
+
+For development, install `python -m pip install -e ".[dev]"` instead.
 
 ## Bootstrap identities
 
@@ -270,6 +270,11 @@ tempus-github-executor `
   --tenant-id acme
 ```
 
+The executor reuses a bounded SQLite connection pool (eight connections by default).
+Use `--executor-pool-size` to tune that local concurrency limit for the deployment. SQLite
+still serializes writes; this removes per-operation connection setup but does not claim
+horizontal or multi-region durability.
+
 The command emits a signed `tempus.action-outcome.v1`. Submit it to the gate through
 `commit_outcome_signed(...)` or `tempus_commit_outcome_signed`. Exit code `2` means the
 external result is `UNKNOWN`; the signed observation must be investigated and the
@@ -392,15 +397,11 @@ the entire local database, nor bypass by an agent that still possesses downstrea
 credentials. Read [THREAT_MODEL.md](THREAT_MODEL.md)
 before using Tempus for high-impact production actions.
 
-## Roadmap and adoption
+## Roadmap
 
-Phase 2 is complete for the single-instance GitHub adapter and Phase 3 is implemented in
-the `0.4.0` source tree. Hosted CI and live credentialed Vault/GitHub checks are deferred
-while the repository runner has a billing restriction; local tests remain the recorded
-validation source. Phase 4 is durable distributed receipts and independent rollback
-detection. The adoption track focuses on design partners, a short GitHub onboarding path,
-and measurable time-to-first-verified-effect. See
-[ROADMAP.md](ROADMAP.md) for ordered milestones and release gates.
+The next release line focuses on large-ledger streaming, durable receipt events,
+independent rollback detection, and operating procedures. See [ROADMAP.md](ROADMAP.md)
+for milestones and explicit exit criteria.
 
 ## Development
 

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Reused a bounded, configurable SQLite connection pool in the mediated executor instead
+  of opening a new connection for every state transition.
+- Added a recovery index and concurrent replay regression coverage proving that only one
+  contender can consume a permit.
+
 ### Phase 3
 
 - A provider-neutral Rust signer boundary and verification-key resolver with compatible
@@ -21,8 +28,8 @@
 - Package maturity advances to design-partner beta (`0.4.0`). Existing v1 schema names
   remain compatible; the Phase 3 binding fields are additive and enforced by executors.
 
-Hosted GitHub Actions and live credentialed Vault/GitHub checks remain deferred until the
-repository billing restriction is resolved; neither is silently treated as passing.
+Live credentialed Vault and GitHub checks remain explicit opt-in tests; an integration
+that was not run is never reported as passing.
 
 ### Added
 
@@ -32,7 +39,7 @@ repository billing restriction is resolved; neither is silently treated as passi
 - Signed, immutable agent registration events with a gate delegation root.
 - Deterministic action idempotency, expiring permits, and single-consumption outcomes.
 - Rust, Python, CLI, and MCP B2A surfaces plus replay/tamper/authorization tests.
-- Source-of-truth B2A implementation plan and production-oriented threat model.
+- Public protocol boundary and production-oriented threat-model documentation.
 - Signed MCP authorization and outcome tools for clients that keep agent and executor
   private keys outside the gate process.
 - Signed executor observations for `STARTED`, `SUCCEEDED`, `FAILED`, and `UNKNOWN`, plus
