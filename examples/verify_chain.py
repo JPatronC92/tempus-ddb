@@ -4,12 +4,13 @@ Example: Record multiple decisions and verify the full causal chain.
 This demonstrates the tamper-evident audit trail capability.
 """
 
-import json
 import gc
+import json
 import tempfile
 from pathlib import Path
 
 from tempus_ddb import TempusDDB, gen_keys
+
 
 def main():
     with tempfile.TemporaryDirectory(prefix="tempus-verify-") as directory:
@@ -47,9 +48,9 @@ def main():
         result = db.validate()
         print(result)
 
-        print("\n✅ Chain verified successfully. Temporary files were removed.")
         del db
         gc.collect()
+        print("\nChain verified successfully. Temporary files were removed.")
 
 if __name__ == "__main__":
     main()

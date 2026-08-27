@@ -12,6 +12,7 @@ requires-python = ">=3.10"
 authors = [
     {name = "Tempus DDB Contributors"}
 ]
+keywords = ["ai", "agents", "authorization", "audit", "cryptography", "github", "mcp", "tamper-evident"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -35,16 +36,15 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "maturin",
-    "ruff",
+    "ruff==0.16.4",
     "bandit",
     "pip-audit"
 ]
-keywords = ["ai", "agents", "authorization", "audit", "cryptography", "github", "mcp", "tamper-evident"]
 
 [project.urls]
-Homepage = "https://github.com/JPatronC92/tempus-ddb"
-Repository = "https://github.com/JPatronC92/tempus-ddb"
-Issues = "https://github.com/JPatronC92/tempus-ddb/issues"
+Homepage = "https://github.com/elbuilder77/tempus-ddb"
+Repository = "https://github.com/elbuilder77/tempus-ddb"
+Issues = "https://github.com/elbuilder77/tempus-ddb/issues"
 
 [project.scripts]
 tempus = "tempus_ddb.cli:main"
@@ -61,3 +61,8 @@ testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py310"
+required-version = "==0.16.4"
+
+[tool.ruff.lint]
+# Keep CI stable while enforcing syntax, import, and runtime-correctness checks.
+select = ["E4", "E7", "E9", "F", "I"]

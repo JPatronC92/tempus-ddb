@@ -2,12 +2,26 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-27
+
+### Fixed
+
+- Kept the Rust quality gate compatible with current stable Clippy.
+- Validate GitHub executor endpoints as absolute HTTPS URLs before an outbound request;
+  malformed, credential-bearing, query-bearing, and plaintext endpoints fail closed.
+- Restored standards-compliant Python package metadata by keeping `keywords` in the
+  project metadata rather than treating it as an install extra.
+
 ### Changed
 
 - Reused a bounded, configurable SQLite connection pool in the mediated executor instead
   of opening a new connection for every state transition.
 - Added a recovery index and concurrent replay regression coverage proving that only one
   contender can consume a permit.
+- Moved runnable demonstrations and the benchmark into `examples/` so the repository
+  root contains only project configuration and public documentation.
+- Updated repository, security, discussion, ownership, and SBOM links for
+  `elbuilder77/tempus-ddb`.
 
 ### Phase 3
 

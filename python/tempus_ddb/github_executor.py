@@ -6,13 +6,28 @@ import os
 import re
 import sys
 from typing import Any, Dict, Optional, Protocol, Tuple
-from urllib import error, request
+from urllib import error, parse, request
 
 from . import __version__
 from ._tempus_ddb import TempusExecutor
 
-
 RESOURCE_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def _validate_github_api_url(api_url: str) -> str:
+    """Accept only an explicit HTTPS GitHub or GitHub Enterprise API endpoint."""
+    candidate = api_url.strip().rstrip("/")
+    parsed = parse.urlsplit(candidate)
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise GitHubExecutorError("GitHub API URL must be an absolute HTTPS endpoint")
+    return candidate
 
 
 class GitHubExecutorError(RuntimeError):
@@ -58,6 +73,7 @@ class UrllibGitHubTransport:
         headers: Dict[str, str],
         payload: Dict[str, Any],
     ) -> Dict[str, Any]:
+        _validate_github_api_url(url)
         encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         github_request = request.Request(
             url,
@@ -66,7 +82,8 @@ class UrllibGitHubTransport:
             method=method,
         )
         try:
-            with request.urlopen(github_request, timeout=30) as response:
+            # The endpoint was validated above as absolute HTTPS with no credentials or query.
+            with request.urlopen(github_request, timeout=30) as response:  # nosec B310
                 body = response.read().decode("utf-8")
                 parsed = json.loads(body) if body else {}
                 if not isinstance(parsed, dict):
@@ -106,7 +123,7 @@ class GitHubExecutorAdapter:
         self._token = token or os.environ.get("GITHUB_TOKEN", "")
         if not self._token:
             raise GitHubExecutorError("GITHUB_TOKEN is required by the executor process")
-        self._api_url = api_url.rstrip("/")
+        self._api_url = _validate_github_api_url(api_url)
         self._transport = transport or UrllibGitHubTransport()
 
     def execute(self, permit_json: str) -> str:

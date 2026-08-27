@@ -920,7 +920,8 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
         return Err("TEMPUS_SIGNER_RESPONSE_INVALID: invalid base64 signature".to_string());
     }
     let mut output = Vec::with_capacity(cleaned.len() / 4 * 3);
-    for chunk in cleaned.chunks_exact(4) {
+    let (chunks, _) = cleaned.as_chunks::<4>();
+    for chunk in chunks {
         let mut values = [0u8; 4];
         let mut padding = 0;
         for (index, byte) in chunk.iter().enumerate() {

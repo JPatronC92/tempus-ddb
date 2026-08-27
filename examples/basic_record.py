@@ -5,12 +5,13 @@ This matches the examples shown in the README.
 Run with: python examples/basic_record.py
 """
 
-import json
 import gc
+import json
 import tempfile
 from pathlib import Path
 
 from tempus_ddb import TempusDDB, gen_keys
+
 
 def main():
     with tempfile.TemporaryDirectory(prefix="tempus-basic-") as directory:
@@ -58,9 +59,9 @@ def main():
         validation = db.validate()
         print("Validation:", validation)
 
-        print("\n✅ Example completed successfully; temporary files were removed.")
         del db
         gc.collect()
+        print("\nExample completed successfully; temporary files were removed.")
 
 if __name__ == "__main__":
     main()

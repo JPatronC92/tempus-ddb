@@ -89,16 +89,14 @@ cannot read the executor's environment or key material.
 
 Python 3.10 or newer is required.
 
-The first packaged release has not been published to PyPI. Install the current source
-from a reviewed commit:
+Install the published beta from PyPI:
 
 ```bash
-git clone https://github.com/JPatronC92/tempus-ddb.git
-cd tempus-ddb
-python -m pip install .
+python -m pip install tempus-ddb
 ```
 
-For development, install `python -m pip install -e ".[dev]"` instead.
+For development, clone `https://github.com/elbuilder77/tempus-ddb.git` and install
+`python -m pip install -e ".[dev]"`.
 
 ## Bootstrap identities
 
@@ -210,11 +208,11 @@ private keys and keyfiles never enter the gate process.
 The repository includes runnable end-to-end demonstrations covering security guards, B2A flow, and tamper detection:
 Examples create ephemeral databases and keys and remove them when they finish.
 
-### 1. Commercial Demo (`commercial_demo.py`)
+### 1. Commercial Demo (`examples/commercial_demo.py`)
 Demonstrates the Phase 2 mediated-executor foundation and bypass prevention against a
 simulated downstream API.
 ```bash
-python commercial_demo.py
+python examples/commercial_demo.py
 ```
 **Key checks performed:**
 - **Direct Bypass Attempt:** Rejected (agent lacks downstream API secret token).
@@ -225,16 +223,16 @@ python commercial_demo.py
 - **Cross-Tenant Guard:** Permits issued for a different tenant ID are blocked.
 - **Trace Verification:** Full cryptographic audit trace verification passes end-to-end.
 
-### 2. Decision Chain Scenario (`demo_scenario.py`)
+### 2. Decision Chain Scenario (`examples/decision_chain.py`)
 Simulates an autonomous bot lifecycle (Genesis &rarr; Decision 1 &rarr; Decision 2) with chain validation and JSON export:
 ```bash
-python demo_scenario.py
+python examples/decision_chain.py
 ```
 
-### 3. CLI Tamper Detection (`tamper_demo_rust_cli.py`)
+### 3. CLI Tamper Detection (`examples/tamper_detection_cli.py`)
 Demonstrates tamper detection using the Rust CLI by simulating unauthorized modifications to recorded traces:
 ```bash
-python tamper_demo_rust_cli.py
+python examples/tamper_detection_cli.py
 ```
 
 ### 4. Code Examples (`examples/`)
@@ -285,12 +283,12 @@ operation must not be retried automatically.
 Tempus DDB includes a benchmarking tool to evaluate transaction throughput and validation latency:
 
 ```bash
-python benchmark.py --records 1000
+python examples/benchmark.py --records 1000
 ```
 
 To output machine-readable JSON:
 ```bash
-python benchmark.py --records 1000 --json
+python examples/benchmark.py --records 1000 --json
 ```
 
 **Optimizations active in v0.2.1+:**

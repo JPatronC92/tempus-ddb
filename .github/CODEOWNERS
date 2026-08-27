@@ -1,9 +1,9 @@
 # Default ownership
-* @JPatronC92
+* @elbuilder77
 
 # Security-sensitive protocol and release surfaces
-/src/ @JPatronC92
-/python/tempus_ddb/ @JPatronC92
-/.github/workflows/ @JPatronC92
-/SECURITY.md @JPatronC92
-/THREAT_MODEL.md @JPatronC92
+/src/ @elbuilder77
+/python/tempus_ddb/ @elbuilder77
+/.github/workflows/ @elbuilder77
+/SECURITY.md @elbuilder77
+/THREAT_MODEL.md @elbuilder77

@@ -6,12 +6,12 @@ import sys
 import tempfile
 import time
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BIN_PATH = os.path.join(BASE_DIR, "target", "debug", "tempus-ddb.exe") if os.name == 'nt' else os.path.join(BASE_DIR, "target", "debug", "tempus-ddb")
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BIN_PATH = os.path.join(PROJECT_DIR, "target", "debug", "tempus-ddb.exe") if os.name == 'nt' else os.path.join(PROJECT_DIR, "target", "debug", "tempus-ddb")
 
 def build_rust_cli():
     print("Building Rust CLI...")
-    result = subprocess.run(["cargo", "build"], cwd=BASE_DIR, capture_output=True, text=True, encoding="utf-8")
+    result = subprocess.run(["cargo", "build"], cwd=PROJECT_DIR, capture_output=True, text=True, encoding="utf-8")
     if result.returncode != 0:
         raise RuntimeError(f"Cargo build failed:\n{result.stderr}")
     print("Build successful.")

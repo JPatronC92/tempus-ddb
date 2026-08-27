@@ -2,7 +2,6 @@ import json
 import time
 
 import pytest
-
 from tempus_ddb import (
     GitHubExecutorAdapter,
     TempusDDB,
@@ -10,6 +9,7 @@ from tempus_ddb import (
     UnknownExecutionError,
     gen_keys,
 )
+from tempus_ddb.github_executor import GitHubExecutorError
 
 
 class FakeGitHubTransport:
@@ -91,6 +91,27 @@ def build_adapter(environment, transport):
         transport=transport,
         executor_pool_size=2,
     )
+
+
+@pytest.mark.parametrize(
+    "api_url",
+    [
+        "http://api.github.test",
+        "https://executor:token@api.github.test",
+        "https://api.github.test?redirect=https://attacker.test",
+    ],
+    ids=["plaintext", "embedded-credentials", "query-string"],
+)
+def test_github_executor_rejects_unsafe_api_urls(execution_environment, api_url):
+    with pytest.raises(GitHubExecutorError, match="absolute HTTPS endpoint"):
+        GitHubExecutorAdapter(
+            str(execution_environment["tmp_path"] / "unsafe-executor.db"),
+            str(execution_environment["executor_keyfile"]),
+            execution_environment["gate_id"],
+            "github-test",
+            token="executor-only-token",
+            api_url=api_url,
+        )
 
 
 def test_executor_pool_size_must_be_positive(execution_environment):

@@ -1,12 +1,13 @@
 """End-to-end autonomous B2A authorization and execution example."""
 
-import json
 import gc
+import json
 import tempfile
 import time
 from pathlib import Path
 
 from tempus_ddb import TempusDDB, gen_keys
+
 
 def public_key(path):
     with open(path, encoding="utf-8") as handle:

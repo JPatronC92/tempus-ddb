@@ -70,6 +70,10 @@ coverage.xml
 /scratch/
 /tmp/
 /temp/
+/.cache/
+.direnv/
+.python-version
+.envrc
 *.tmp
 *.temp
 *.log
@@ -80,6 +84,12 @@ coverage.xml
 *~
 
 # Editors and operating systems
+.agents/
+.codex/
+.claude/
+.cursor/
+.windsurf/
+.zed/
 .idea/
 .vscode/
 .vs/
