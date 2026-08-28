@@ -43,6 +43,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/elbuilder77/tempus-ddb"
+Documentation = "https://elbuilder77.github.io/tempus-ddb/"
 Repository = "https://github.com/elbuilder77/tempus-ddb"
 Issues = "https://github.com/elbuilder77/tempus-ddb/issues"
 

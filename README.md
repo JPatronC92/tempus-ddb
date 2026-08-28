@@ -13,7 +13,8 @@ Local-first · Signed policy · Workload identity · Fail-closed receipts · MCP
 > Distributed permit consumption and independent external checkpoints are not.
 >
 > [Roadmap](ROADMAP.md) · [Security](SECURITY.md) ·
-> [Threat model](THREAT_MODEL.md) · [Contributing](CONTRIBUTING.md)
+> [Threat model](THREAT_MODEL.md) · [Contributing](CONTRIBUTING.md) ·
+> [Project site](https://elbuilder77.github.io/tempus-ddb/)
 
 Tempus sits between an agent's intent and an external effect. The agent signs what it
 wants to do, Tempus issues a short-lived permit, an executor performs the effect, and
