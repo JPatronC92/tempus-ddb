@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#07111f">
-    <meta name="description" content="Inspect a non-production Tempus DDB trace fixture and verify its hashes, linked records and Ed25519 signatures in the browser.">
+    <meta name="theme-color" content="#08110d">
+    <meta name="description" content="Inspect a small, synthetic Tempus DDB trace in your browser.">
     <meta property="og:title" content="Trace demo · Tempus DDB">
     <meta property="og:description" content="Inspect a non-production trace fixture and see what changes when its evidence is altered.">
     <meta property="og:type" content="website">
@@ -20,40 +20,40 @@
     <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
       <div class="shell">
-        <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">T/</span> TEMPUS DDB</a>
+        <a class="brand" href="./"><img class="brand-logo" src="assets/logo.png" alt="Tempus — The Decision Database"></a>
         <nav class="site-nav" aria-label="Main navigation">
           <a href="./">Overview</a>
-          <a href="docs.html">Docs</a>
-          <a href="trace.html" aria-current="page">Trace demo</a>
-          <a class="nav-source" href="https://github.com/elbuilder77/tempus-ddb">View source</a>
+          <a href="docs.html">Guide</a>
+          <a href="trace.html" aria-current="page">Sample trace</a>
+          <a class="nav-source" href="https://github.com/elbuilder77/tempus-ddb">GitHub</a>
         </nav>
       </div>
     </header>
     <main id="main-content">
       <div class="shell">
         <header class="page-hero">
-          <p class="eyebrow">Browser trace explorer</p>
-          <h1>Inspect evidence without trusting the screen.</h1>
-          <p class="lede">This public, synthetic fixture verifies canonical hashes, cross-record bindings and Ed25519 signatures locally in your browser. No request reaches a Tempus runtime.</p>
+          <p class="eyebrow">Sample trace</p>
+          <h1>Inspect a sample trace.</h1>
+          <p class="lede">This small, synthetic example checks hashes, record links and Ed25519 signatures in your browser. It does not connect to a Tempus runtime.</p>
         </header>
       </div>
 
       <section>
         <div class="shell trace-intro">
           <section class="trace-panel" aria-labelledby="trace-summary-title">
-            <p class="eyebrow">Fixture summary</p>
-            <h2 id="trace-summary-title">One bounded action, four linked records.</h2>
+            <p class="eyebrow">Trace summary</p>
+            <h2 id="trace-summary-title">One action. Four linked records.</h2>
             <div class="trace-summary" id="trace-summary" aria-live="polite"><p class="copy">Loading the demonstration fixture…</p></div>
           </section>
-          <aside class="notice"><strong>Scope of this demo</strong><br>This is a standalone browser fixture. It checks its embedded hashes, signatures and links, but does not reproduce Tempus policy evaluation, identity-history checks or executor state. Use <code>tempus verify-trace</code> for a real trace.</aside>
+          <aside class="notice"><strong>About this sample</strong><br>It checks its embedded hashes, signatures and links. For a real trace, use <code>tempus verify-trace</code>.</aside>
         </div>
       </section>
 
       <section>
         <div class="shell trace-intro">
           <section class="trace-panel" aria-labelledby="verification-title">
-            <p class="eyebrow">Verification result</p>
-            <h2 id="verification-title">Run the checks locally.</h2>
+            <p class="eyebrow">Verification</p>
+            <h2 id="verification-title">Run the checks here.</h2>
             <p class="copy" id="verification-status" role="status">Preparing checks…</p>
             <div class="trace-controls">
               <button class="button primary" type="button" id="verify-original">Verify original fixture</button>
@@ -61,7 +61,7 @@
             </div>
             <div class="trace-results" id="trace-results" aria-live="polite"></div>
           </section>
-          <aside class="trace-panel"><p class="eyebrow">Why this matters</p><h2>One byte should be enough to change the answer.</h2><p class="copy">The alteration action changes only the in-memory view. It does not edit the fixture, yet the bound intent hash and agent signature must no longer verify.</p><p class="copy">When Web Crypto lacks Ed25519 support, the page states that signature checks are unavailable rather than presenting a false positive.</p></aside>
+          <aside class="trace-panel"><p class="eyebrow">What this shows</p><h2>A small change changes the result.</h2><p class="copy">The alteration changes only the in-memory view. The intent hash and agent signature should no longer verify.</p><p class="copy">If the browser lacks Ed25519 support, the page states that signature checks are unavailable.</p></aside>
         </div>
       </section>
 

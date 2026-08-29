@@ -3,32 +3,32 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#07111f">
-    <meta name="description" content="Tempus DDB is a fail-closed security boundary for bounded autonomous actions, with signed policy and verifiable receipts.">
-    <meta property="og:title" content="Tempus DDB — Verify before agents act">
-    <meta property="og:description" content="A fail-closed B2A security gate for bounded autonomous actions with signed policy and verifiable receipts.">
+    <meta name="theme-color" content="#08110d">
+    <meta name="description" content="Tempus DDB keeps a clear, verifiable record around bounded agent actions.">
+    <meta property="og:title" content="Tempus DDB — Decision records for agent actions">
+    <meta property="og:description" content="Signed requests, bounded permits and records you can verify.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://elbuilder77.github.io/tempus-ddb/">
     <meta property="og:image" content="https://elbuilder77.github.io/tempus-ddb/og.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Tempus DDB — Verify before agents act">
-    <meta name="twitter:description" content="A fail-closed B2A security gate for bounded autonomous actions with signed policy and verifiable receipts.">
+    <meta name="twitter:title" content="Tempus DDB — Decision records for agent actions">
+    <meta name="twitter:description" content="Signed requests, bounded permits and records you can verify.">
     <meta name="twitter:image" content="https://elbuilder77.github.io/tempus-ddb/og.png">
     <link rel="stylesheet" href="assets/site.css">
-    <title>Tempus DDB — Verify before agents act</title>
+    <title>Tempus DDB — Decision records for agent actions</title>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
       <div class="shell">
-        <a class="brand" href="./" aria-current="page"><span class="brand-mark" aria-hidden="true">T/</span> TEMPUS DDB</a>
+        <a class="brand" href="./" aria-current="page"><img class="brand-logo" src="assets/logo.png" alt="Tempus — The Decision Database"></a>
         <nav class="site-nav" aria-label="Main navigation">
           <a href="./">Overview</a>
-          <a href="docs.html">Docs</a>
-          <a href="trace.html">Trace demo</a>
-          <a class="nav-source" href="https://github.com/elbuilder77/tempus-ddb">View source</a>
+          <a href="docs.html">Guide</a>
+          <a href="trace.html">Sample trace</a>
+          <a class="nav-source" href="https://github.com/elbuilder77/tempus-ddb">GitHub</a>
         </nav>
       </div>
     </header>
@@ -36,25 +36,25 @@
       <div class="shell">
         <header class="hero">
           <div>
-            <p class="eyebrow">B2A security gate · v0.4.0 beta</p>
-            <h1>Give every agent action a boundary.</h1>
-            <p class="lede">Tempus DDB turns a signed request into a short-lived, single-use permit—and leaves a verifiable receipt when an executor produces an effect.</p>
+            <p class="eyebrow">Open source · v0.4.0 beta</p>
+            <h1>A clear record for every agent action.</h1>
+            <p class="lede">Tempus keeps an agent's request separate from the authority to carry it out. It issues a short-lived permit and leaves a record you can verify.</p>
             <div class="button-row">
-              <a class="button primary" href="docs.html">Read the integration guide</a>
-              <a class="button" href="trace.html">Inspect a trace</a>
+              <a class="button primary" href="docs.html">Read the guide</a>
+              <a class="button" href="trace.html">View a sample trace</a>
             </div>
           </div>
           <div class="hero-visual" aria-label="Example Tempus action trace">
             <div class="evidence-card">
               <div class="evidence-top">
-                <div class="evidence-label"><span class="status-dot" aria-hidden="true"></span> Action trace</div>
+                <div class="evidence-label"><span class="status-dot" aria-hidden="true"></span> Sample trace</div>
                 <span class="evidence-id">demo-7f2c…a19e</span>
               </div>
               <div class="trace-stack">
-                <div class="trace-row"><span class="trace-step">01</span><div><strong>Signed intent</strong><span>Exact requested action</span></div><span class="trace-state">BOUND</span></div>
-                <div class="trace-row"><span class="trace-step">02</span><div><strong>Policy decision</strong><span>Deterministic evidence</span></div><span class="trace-state">ALLOWED</span></div>
-                <div class="trace-row"><span class="trace-step">03</span><div><strong>Permit consumed</strong><span>Once, before effect</span></div><span class="trace-state">USED</span></div>
-                <div class="trace-row"><span class="trace-step">04</span><div><strong>Receipt verified</strong><span>Outcome linked to intent</span></div><span class="trace-state">VALID</span></div>
+                <div class="trace-row"><span class="trace-step">01</span><div><strong>Request signed</strong><span>The exact action is recorded</span></div><span class="trace-state">BOUND</span></div>
+                <div class="trace-row"><span class="trace-step">02</span><div><strong>Policy checked</strong><span>The decision is recorded</span></div><span class="trace-state">ALLOWED</span></div>
+                <div class="trace-row"><span class="trace-step">03</span><div><strong>Permit used</strong><span>Once, before the effect</span></div><span class="trace-state">USED</span></div>
+                <div class="trace-row"><span class="trace-step">04</span><div><strong>Receipt checked</strong><span>The outcome links back to the request</span></div><span class="trace-state">VALID</span></div>
               </div>
               <div class="evidence-footer">No permit, no effect. <code>tempus.action-trace.v1</code></div>
             </div>
@@ -65,8 +65,8 @@
       <section id="protocol">
         <div class="shell">
           <div class="section-heading">
-            <div><p class="eyebrow">The protocol</p><h2>Intent is not authorization.</h2></div>
-            <p class="copy">An agent can ask for an action, but cannot authorize it. Tempus evaluates a signed intent against deterministic policy, and an executor must consume the bound permit before it can act.</p>
+            <div><p class="eyebrow">How it works</p><h2>A request is not permission.</h2></div>
+            <p class="copy">An agent can ask for an action, but it should not be able to approve its own request. Tempus records the decision, then an executor checks the permit before acting.</p>
           </div>
           <div class="flow-grid" aria-label="Four stages of the Tempus protocol">
             <article class="flow-step"><span class="flow-index">01 / IDENTITY</span><h3>Sign the request</h3><p>The requesting workload signs the exact payload it wants executed.</p></article>
@@ -80,8 +80,8 @@
       <section id="capabilities">
         <div class="shell">
           <div class="section-heading">
-            <div><p class="eyebrow">What is in the source</p><h2>Control the handoff from model to effect.</h2></div>
-            <p class="copy">Tempus is a local-first Rust runtime with Python, CLI and MCP surfaces. It keeps downstream credentials with the executor, rather than in the agent payload.</p>
+            <div><p class="eyebrow">What is available</p><h2>A small boundary around external actions.</h2></div>
+            <p class="copy">Tempus is a local-first Rust runtime with Python, CLI and MCP interfaces. The executor keeps downstream credentials; the agent does not receive them.</p>
           </div>
           <div class="pillar-grid">
             <article class="pillar"><span class="pillar-label">Control plane</span><h3>Policy and identity evidence</h3><p>Signed, versioned rules and workload lifecycle events are bound to each authorization.</p><ul><li>Ed25519 identities</li><li>Rotation and revocation</li><li>Tenant-scoped delegation</li></ul></article>
@@ -94,18 +94,18 @@
       <section aria-labelledby="boundary-title">
         <div class="shell">
           <div class="boundary">
-            <div><p class="eyebrow">Release boundary</p><h2 id="boundary-title">A public beta, with its limits stated plainly.</h2><p>v0.4.0 is local-first and single-instance. Distributed permit consumption, independently durable external checkpoints and a live web audit console are not part of the current source line.</p></div>
-            <div class="boundary-note"><strong>Use intentionally</strong><span>Read the threat model and validate your credential boundary before relying on Tempus for production-critical external effects.</span></div>
+            <div><p class="eyebrow">Current limits</p><h2 id="boundary-title">A beta with clear limits.</h2><p>v0.4.0 is local-first and single-instance. It does not yet include distributed permit consumption, independent external checkpoints or a live audit console.</p></div>
+            <div class="boundary-note"><strong>Before production</strong><span>Read the threat model and check the credential boundary around your executor.</span></div>
           </div>
         </div>
       </section>
 
       <section class="final-cta" aria-labelledby="cta-title">
         <div class="shell">
-          <p class="eyebrow">Start with the contract</p>
-          <h2 id="cta-title">Make autonomous work accountable by design.</h2>
-          <p class="copy">Read the protocol, inspect a cryptographically checked example, then run the source in a controlled environment.</p>
-          <div class="button-row"><a class="button primary" href="docs.html">Open documentation</a><a class="button" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">View v0.4.0 release</a></div>
+          <p class="eyebrow">Start small</p>
+          <h2 id="cta-title">Try one controlled integration.</h2>
+          <p class="copy">Read the guide, inspect the sample trace, then run the source in an environment you control.</p>
+          <div class="button-row"><a class="button primary" href="docs.html">Open the guide</a><a class="button" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Get v0.4.0</a></div>
         </div>
       </section>
     </main>
