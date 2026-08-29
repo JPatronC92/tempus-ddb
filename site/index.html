@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#06101e">
-    <meta name="description" content="A local-first B2A security gate that verifies agent actions before execution and produces tamper-evident receipts.">
+    <meta name="theme-color" content="#07111f">
+    <meta name="description" content="Tempus DDB is a fail-closed security boundary for bounded autonomous actions, with signed policy and verifiable receipts.">
     <meta property="og:title" content="Tempus DDB — Verify before agents act">
-    <meta property="og:description" content="Signed permits and verifiable execution receipts for bounded autonomous actions.">
+    <meta property="og:description" content="A fail-closed B2A security gate for bounded autonomous actions with signed policy and verifiable receipts.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://elbuilder77.github.io/tempus-ddb/">
     <meta property="og:image" content="https://elbuilder77.github.io/tempus-ddb/og.png">
@@ -14,126 +14,101 @@
     <meta property="og:image:height" content="630">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Tempus DDB — Verify before agents act">
-    <meta name="twitter:description" content="Signed permits and verifiable execution receipts for bounded autonomous actions.">
+    <meta name="twitter:description" content="A fail-closed B2A security gate for bounded autonomous actions with signed policy and verifiable receipts.">
     <meta name="twitter:image" content="https://elbuilder77.github.io/tempus-ddb/og.png">
+    <link rel="stylesheet" href="assets/site.css">
     <title>Tempus DDB — Verify before agents act</title>
-    <style>
-      :root { color-scheme: dark; --bg: #06101e; --surface: #0b1728; --surface-strong: #101f35; --ink: #eff6ff; --muted: #9cafc8; --line: #243955; --cyan: #6ee7ff; --blue: #168dff; --violet: #afa5ff; --amber: #ffd087; --radius: 18px; }
-      * { box-sizing: border-box; }
-      html { scroll-behavior: smooth; }
-      body { margin: 0; color: var(--ink); background: radial-gradient(circle at 87% 0%, rgba(37, 61, 133, .7), transparent 30rem), radial-gradient(circle at 5% 52%, rgba(1, 136, 166, .18), transparent 26rem), var(--bg); font: 16px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      a { color: inherit; }
-      .skip-link { position: absolute; left: -9999px; top: auto; }
-      .skip-link:focus { left: 1rem; top: 1rem; z-index: 10; padding: .65rem .9rem; border-radius: 8px; background: var(--cyan); color: #00131b; }
-      .shell { width: min(1180px, calc(100% - 40px)); margin: 0 auto; }
-      .site-nav { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; min-height: 84px; border-bottom: 1px solid rgba(171, 196, 231, .16); }
-      .brand { color: var(--ink); display: inline-flex; align-items: center; gap: .55rem; font-size: .9rem; font-weight: 850; letter-spacing: .11em; text-decoration: none; }
-      .brand-mark { color: var(--cyan); font-size: 1.12rem; letter-spacing: 0; }
-      .nav-links { display: flex; align-items: center; gap: 1.25rem; color: var(--muted); font-size: .88rem; }
-      .nav-links a { text-decoration: none; }
-      .nav-links a:hover, .nav-links a:focus-visible { color: var(--cyan); }
-      .nav-source { border: 1px solid rgba(110, 231, 255, .7); border-radius: 999px; color: var(--ink); padding: .5rem .84rem; }
-      .hero { display: grid; grid-template-columns: minmax(0, 1.04fr) minmax(380px, .96fr); align-items: center; gap: clamp(2.5rem, 7vw, 7.5rem); min-height: min(740px, calc(100vh - 84px)); padding: clamp(4rem, 8vw, 7.5rem) 0 clamp(4.75rem, 9vw, 8rem); }
-      .eyebrow { margin: 0 0 1rem; color: var(--cyan); font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-      h1 { max-width: 700px; margin: 0; font-size: clamp(3.35rem, 6.6vw, 6.5rem); line-height: .92; letter-spacing: -.07em; }
-      .hero-copy > p:not(.eyebrow) { max-width: 650px; margin: 1.6rem 0 0; color: var(--muted); font-size: clamp(1.08rem, 1.75vw, 1.31rem); }
-      .hero-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 2.15rem; }
-      .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--line); border-radius: 999px; padding: .65rem 1rem; color: var(--ink); font-size: .92rem; font-weight: 750; text-decoration: none; }
-      .button:hover, .button:focus-visible { border-color: var(--cyan); color: var(--cyan); }
-      .button.primary { border-color: var(--cyan); background: var(--cyan); color: #001824; }
-      .button.primary:hover, .button.primary:focus-visible { background: #b0f4ff; color: #001824; }
-      .install { width: min(100%, 510px); margin-top: 2.2rem; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: rgba(4, 14, 28, .76); }
-      .install-head { display: flex; justify-content: space-between; gap: 1rem; padding: .62rem .85rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: .74rem; }
-      .install-head strong { color: var(--ink); font-weight: 700; }
-      .install code { display: block; padding: .82rem .9rem; color: #d2f8ff; font: .87rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-x: auto; }
-      .hero-art { position: relative; }
-      .hero-art::before { position: absolute; inset: -8% -5%; z-index: -1; content: ""; border-radius: 40%; background: radial-gradient(circle, rgba(24, 141, 255, .19), transparent 66%); filter: blur(12px); }
-      .logo-frame { overflow: hidden; border: 1px solid rgba(101, 145, 207, .56); border-radius: 23px; background: #0b1424; box-shadow: 0 34px 90px rgba(0, 0, 0, .38); }
-      .logo-frame img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; }
-      .signal-rail { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); background: rgba(7, 18, 33, .94); }
-      .signal-rail div { min-height: 92px; padding: 1rem; }
-      .signal-rail div + div { border-left: 1px solid var(--line); }
-      .signal-rail strong { display: block; color: var(--ink); font-size: .9rem; }
-      .signal-rail span { display: block; margin-top: .18rem; color: var(--muted); font-size: .75rem; line-height: 1.4; }
-      section { border-top: 1px solid rgba(171, 196, 231, .16); padding: clamp(4rem, 7vw, 6.75rem) 0; }
-      .section-heading { display: grid; grid-template-columns: minmax(0, .83fr) minmax(0, 1.17fr); gap: 2rem; align-items: start; }
-      h2 { max-width: 570px; margin: 0; font-size: clamp(2rem, 4vw, 3.35rem); line-height: 1.02; letter-spacing: -.055em; }
-      .section-copy { max-width: 590px; margin: 0; color: var(--muted); font-size: 1.04rem; }
-      .protocol { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 3.25rem; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-      .protocol-step { min-height: 220px; padding: 1.35rem; background: rgba(10, 23, 40, .54); }
-      .protocol-step + .protocol-step { border-left: 1px solid var(--line); }
-      .step-number { color: var(--violet); font-size: .75rem; font-weight: 800; letter-spacing: .1em; }
-      .protocol-step h3 { margin: 2.8rem 0 .6rem; font-size: 1.12rem; }
-      .protocol-step p { margin: 0; color: var(--muted); font-size: .9rem; }
-      .capability-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 3.25rem; }
-      .capability { min-height: 260px; padding: 1.5rem; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(145deg, rgba(20, 38, 63, .84), rgba(9, 20, 36, .84)); }
-      .capability-label { color: var(--cyan); font-size: .74rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-      .capability h3 { margin: 1.45rem 0 .72rem; font-size: 1.33rem; line-height: 1.08; }
-      .capability p { margin: 0; color: var(--muted); }
-      .capability ul { margin: 1.15rem 0 0; padding: 0; color: #cbd8eb; font-size: .88rem; list-style: none; }
-      .capability li { margin: .34rem 0; }
-      .capability li::before { color: var(--cyan); content: "— "; }
-      .boundary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .72fr); gap: 2rem; padding: clamp(1.65rem, 4vw, 2.6rem); border: 1px solid rgba(255, 208, 135, .55); border-radius: var(--radius); background: linear-gradient(115deg, rgba(77, 51, 15, .24), rgba(12, 27, 48, .74)); }
-      .boundary h2 { font-size: clamp(1.85rem, 3vw, 2.7rem); }
-      .boundary p { max-width: 620px; margin: 1rem 0 0; color: var(--muted); }
-      .boundary-aside { align-self: center; padding-left: 1.35rem; border-left: 2px solid var(--amber); color: #d9e5f7; }
-      .boundary-aside strong { display: block; color: var(--amber); font-size: .77rem; letter-spacing: .11em; text-transform: uppercase; }
-      .boundary-aside span { display: block; margin-top: .5rem; color: var(--muted); font-size: .92rem; }
-      .final-cta { padding: clamp(4.5rem, 8vw, 7.5rem) 0; text-align: center; }
-      .final-cta h2 { margin: 0 auto; }
-      .final-cta p { max-width: 580px; margin: 1.15rem auto 0; color: var(--muted); }
-      .final-cta .hero-actions { justify-content: center; }
-      footer { display: flex; justify-content: space-between; gap: 1.5rem; padding: 1.55rem 0 2.5rem; border-top: 1px solid rgba(171, 196, 231, .16); color: var(--muted); font-size: .84rem; }
-      footer a { color: var(--muted); text-underline-offset: .18em; }
-      footer a:hover, footer a:focus-visible { color: var(--cyan); }
-      @media (max-width: 900px) { .hero { grid-template-columns: 1fr; min-height: 0; gap: 3rem; } .hero-art { max-width: 680px; } .section-heading, .boundary { grid-template-columns: 1fr; } .protocol { grid-template-columns: repeat(2, 1fr); } .protocol-step:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); } .protocol-step:nth-child(4) { border-top: 1px solid var(--line); } .capability-grid { grid-template-columns: 1fr; } .boundary-aside { padding: 1rem 0 0; border-top: 2px solid var(--amber); border-left: 0; } }
-      @media (max-width: 620px) { .shell { width: min(100% - 28px, 1180px); } .site-nav { min-height: 72px; } .nav-links a:not(.nav-source) { display: none; } .hero { padding-top: 3.4rem; } h1 { font-size: clamp(3rem, 16vw, 4.4rem); } .signal-rail { grid-template-columns: 1fr; } .signal-rail div + div { border-top: 1px solid var(--line); border-left: 0; } .signal-rail div { min-height: 0; } .protocol { grid-template-columns: 1fr; } .protocol-step + .protocol-step { border-top: 1px solid var(--line); border-left: 0; } .protocol-step h3 { margin-top: 1.7rem; } footer { align-items: flex-start; flex-direction: column; } }
-    </style>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
-    <div class="shell">
-      <nav class="site-nav" aria-label="Main navigation">
-        <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">T/</span> TEMPUS DDB</a>
-        <div class="nav-links"><a href="#protocol">Protocol</a><a href="#capabilities">Capabilities</a><a class="nav-source" href="https://github.com/elbuilder77/tempus-ddb">View source</a></div>
-      </nav>
-      <main id="main-content">
+    <header class="site-header">
+      <div class="shell">
+        <a class="brand" href="./" aria-current="page"><span class="brand-mark" aria-hidden="true">T/</span> TEMPUS DDB</a>
+        <nav class="site-nav" aria-label="Main navigation">
+          <a href="./">Overview</a>
+          <a href="docs.html">Docs</a>
+          <a href="trace.html">Trace demo</a>
+          <a class="nav-source" href="https://github.com/elbuilder77/tempus-ddb">View source</a>
+        </nav>
+      </div>
+    </header>
+    <main id="main-content">
+      <div class="shell">
         <header class="hero">
-          <div class="hero-copy">
+          <div>
             <p class="eyebrow">B2A security gate · v0.4.0 beta</p>
-            <h1>Verify before agents act.</h1>
-            <p>Tempus DDB evaluates a signed agent intent, issues a short-lived single-use permit, and records a tamper-evident execution receipt that can be verified end to end.</p>
-            <div class="hero-actions"><a class="button primary" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Get v0.4.0</a><a class="button" href="#protocol">Explore the protocol</a></div>
-            <div class="install" aria-label="Package installation command"><div class="install-head"><strong>Python package</strong><span>PyPI publishing pending</span></div><code>python -m pip install tempus-ddb</code></div>
+            <h1>Give every agent action a boundary.</h1>
+            <p class="lede">Tempus DDB turns a signed request into a short-lived, single-use permit—and leaves a verifiable receipt when an executor produces an effect.</p>
+            <div class="button-row">
+              <a class="button primary" href="docs.html">Read the integration guide</a>
+              <a class="button" href="trace.html">Inspect a trace</a>
+            </div>
           </div>
-          <div class="hero-art">
-            <div class="logo-frame">
-              <img src="assets/logo.png" width="1536" height="1024" alt="Tempus — The Decision Database" fetchpriority="high" decoding="async">
-              <div class="signal-rail" aria-label="Key product properties"><div><strong>Signed intent</strong><span>The agent signs exactly what it requests.</span></div><div><strong>Single-use permit</strong><span>The executor consumes an allowed action once.</span></div><div><strong>Verified trace</strong><span>Authorization and outcome remain linked.</span></div></div>
+          <div class="hero-visual" aria-label="Example Tempus action trace">
+            <div class="evidence-card">
+              <div class="evidence-top">
+                <div class="evidence-label"><span class="status-dot" aria-hidden="true"></span> Action trace</div>
+                <span class="evidence-id">demo-7f2c…a19e</span>
+              </div>
+              <div class="trace-stack">
+                <div class="trace-row"><span class="trace-step">01</span><div><strong>Signed intent</strong><span>Exact requested action</span></div><span class="trace-state">BOUND</span></div>
+                <div class="trace-row"><span class="trace-step">02</span><div><strong>Policy decision</strong><span>Deterministic evidence</span></div><span class="trace-state">ALLOWED</span></div>
+                <div class="trace-row"><span class="trace-step">03</span><div><strong>Permit consumed</strong><span>Once, before effect</span></div><span class="trace-state">USED</span></div>
+                <div class="trace-row"><span class="trace-step">04</span><div><strong>Receipt verified</strong><span>Outcome linked to intent</span></div><span class="trace-state">VALID</span></div>
+              </div>
+              <div class="evidence-footer">No permit, no effect. <code>tempus.action-trace.v1</code></div>
             </div>
           </div>
         </header>
-        <section id="protocol" aria-labelledby="protocol-title">
-          <div class="section-heading"><div><p class="eyebrow">The protocol</p><h2 id="protocol-title">A deliberate boundary between intent and effect.</h2></div><p class="section-copy">The runtime checks deterministic policy and identity evidence before execution. An executor cannot treat an agent request as authorization; it must consume a valid, bound permit and return a signed outcome.</p></div>
-          <div class="protocol" aria-label="Four stages of the B2A protocol">
-            <article class="protocol-step"><span class="step-number">01 / IDENTITY</span><h3>Register</h3><p>Agent identities are recorded with signed registration evidence and lifecycle controls.</p></article>
-            <article class="protocol-step"><span class="step-number">02 / POLICY</span><h3>Authorize</h3><p>A signed action intent is evaluated against a deterministic, versioned policy bundle.</p></article>
-            <article class="protocol-step"><span class="step-number">03 / EXECUTION</span><h3>Consume once</h3><p>The executor verifies the permit binding, expiry and tenant before producing an effect.</p></article>
-            <article class="protocol-step"><span class="step-number">04 / EVIDENCE</span><h3>Verify trace</h3><p>Authorization and execution receipts are linked into a cryptographically verifiable action trace.</p></article>
+      </div>
+
+      <section id="protocol">
+        <div class="shell">
+          <div class="section-heading">
+            <div><p class="eyebrow">The protocol</p><h2>Intent is not authorization.</h2></div>
+            <p class="copy">An agent can ask for an action, but cannot authorize it. Tempus evaluates a signed intent against deterministic policy, and an executor must consume the bound permit before it can act.</p>
           </div>
-        </section>
-        <section id="capabilities" aria-labelledby="capabilities-title">
-          <div class="section-heading"><div><p class="eyebrow">In the source</p><h2 id="capabilities-title">Primitives for bounded autonomous work.</h2></div><p class="section-copy">The implementation is a native Rust runtime with Python, CLI and MCP surfaces. The same authorization boundary is used by the generic executor and the constrained GitHub adapter.</p></div>
-          <div class="capability-grid">
-            <article class="capability"><span class="capability-label">Control plane</span><h3>Policy and identity evidence</h3><p>Policy decisions bind their digest and reason codes to the issued permit.</p><ul><li>Ed25519 agent identities</li><li>Rotation and revocation events</li><li>Delegation constraints</li></ul></article>
-            <article class="capability"><span class="capability-label">Execution plane</span><h3>Fail-closed permit consumption</h3><p>Single consumption and idempotency protect the handoff from authorization to effect.</p><ul><li>Short-lived permits</li><li>Signed executor outcomes</li><li>Ambiguous effects remain UNKNOWN</li></ul></article>
-            <article class="capability"><span class="capability-label">Integration plane</span><h3>Native, CLI and MCP access</h3><p>Use a local SQLite-backed runtime, inspect its trace, or bind a verified permit to a limited GitHub write.</p><ul><li>SQLite ledger with WAL</li><li>Vault Transit signer boundary</li><li>GitHub issue and pull-request actions</li></ul></article>
+          <div class="flow-grid" aria-label="Four stages of the Tempus protocol">
+            <article class="flow-step"><span class="flow-index">01 / IDENTITY</span><h3>Sign the request</h3><p>The requesting workload signs the exact payload it wants executed.</p></article>
+            <article class="flow-step"><span class="flow-index">02 / POLICY</span><h3>Issue a permit</h3><p>Policy evidence, identity and scope determine an allowed or blocked decision.</p></article>
+            <article class="flow-step"><span class="flow-index">03 / EXECUTION</span><h3>Consume once</h3><p>The executor verifies the permit's binding, tenant and expiry before any effect.</p></article>
+            <article class="flow-step"><span class="flow-index">04 / EVIDENCE</span><h3>Verify the trace</h3><p>Intent, authorization and outcome remain cryptographically linked for inspection.</p></article>
           </div>
-        </section>
-        <section aria-labelledby="boundary-title"><div class="boundary"><div><p class="eyebrow">Release boundary</p><h2 id="boundary-title">A public beta with its operating limits stated plainly.</h2><p>v0.4.0 is local-first and designed for a single-instance deployment. Distributed permit consumption, independently durable external checkpoints and a web audit console are not part of the current source line.</p></div><div class="boundary-aside"><strong>Use intentionally</strong><span>Evaluate the current boundary in a controlled environment before relying on it for production-critical external effects.</span></div></div></section>
-        <section class="final-cta" aria-labelledby="cta-title"><p class="eyebrow">Start with the contract</p><h2 id="cta-title">Make every autonomous action accountable.</h2><p>Read the source, run the examples and inspect the release artifacts before integrating Tempus into a real execution path.</p><div class="hero-actions"><a class="button primary" href="https://github.com/elbuilder77/tempus-ddb">View the repository</a><a class="button" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Release notes</a></div></section>
-      </main>
-      <footer><span>MIT licensed · Python 3.10+ · Rust native extension</span><span><a href="https://github.com/elbuilder77/tempus-ddb">GitHub</a> · <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/SECURITY.md">Security</a> · <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/THREAT_MODEL.md">Threat model</a></span></footer>
-    </div>
+        </div>
+      </section>
+
+      <section id="capabilities">
+        <div class="shell">
+          <div class="section-heading">
+            <div><p class="eyebrow">What is in the source</p><h2>Control the handoff from model to effect.</h2></div>
+            <p class="copy">Tempus is a local-first Rust runtime with Python, CLI and MCP surfaces. It keeps downstream credentials with the executor, rather than in the agent payload.</p>
+          </div>
+          <div class="pillar-grid">
+            <article class="pillar"><span class="pillar-label">Control plane</span><h3>Policy and identity evidence</h3><p>Signed, versioned rules and workload lifecycle events are bound to each authorization.</p><ul><li>Ed25519 identities</li><li>Rotation and revocation</li><li>Tenant-scoped delegation</li></ul></article>
+            <article class="pillar"><span class="pillar-label">Execution plane</span><h3>Fail-closed permit use</h3><p>Execution is mediated by a short-lived permit and a single-consumption receipt.</p><ul><li>Deterministic action IDs</li><li>Idempotency safeguards</li><li>UNKNOWN is not retried</li></ul></article>
+            <article class="pillar"><span class="pillar-label">Integration plane</span><h3>Native, CLI and MCP access</h3><p>Use the same boundary in a local runtime, an audit workflow or constrained GitHub automation.</p><ul><li>SQLite-backed ledger</li><li>Vault Transit signer support</li><li>Issue and pull-request adapter</li></ul></article>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="boundary-title">
+        <div class="shell">
+          <div class="boundary">
+            <div><p class="eyebrow">Release boundary</p><h2 id="boundary-title">A public beta, with its limits stated plainly.</h2><p>v0.4.0 is local-first and single-instance. Distributed permit consumption, independently durable external checkpoints and a live web audit console are not part of the current source line.</p></div>
+            <div class="boundary-note"><strong>Use intentionally</strong><span>Read the threat model and validate your credential boundary before relying on Tempus for production-critical external effects.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="final-cta" aria-labelledby="cta-title">
+        <div class="shell">
+          <p class="eyebrow">Start with the contract</p>
+          <h2 id="cta-title">Make autonomous work accountable by design.</h2>
+          <p class="copy">Read the protocol, inspect a cryptographically checked example, then run the source in a controlled environment.</p>
+          <div class="button-row"><a class="button primary" href="docs.html">Open documentation</a><a class="button" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">View v0.4.0 release</a></div>
+        </div>
+      </section>
+    </main>
+    <footer class="shell site-footer"><span>MIT licensed · Python 3.10+ · Rust native extension</span><span><a href="https://github.com/elbuilder77/tempus-ddb">GitHub</a> · <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/SECURITY.md">Security</a> · <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/THREAT_MODEL.md">Threat model</a></span></footer>
   </body>
 </html>

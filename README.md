@@ -14,7 +14,9 @@ Local-first · Signed policy · Workload identity · Fail-closed receipts · MCP
 >
 > [Roadmap](ROADMAP.md) · [Security](SECURITY.md) ·
 > [Threat model](THREAT_MODEL.md) · [Contributing](CONTRIBUTING.md) ·
-> [Project site](https://elbuilder77.github.io/tempus-ddb/)
+> [Project site](https://elbuilder77.github.io/tempus-ddb/) ·
+> [Integration guide](https://elbuilder77.github.io/tempus-ddb/docs.html) ·
+> [Trace demo](https://elbuilder77.github.io/tempus-ddb/trace.html)
 
 Tempus sits between an agent's intent and an external effect. The agent signs what it
 wants to do, Tempus issues a short-lived permit, an executor performs the effect, and
@@ -23,6 +25,11 @@ humans only inspect the resulting history.
 
 > **Product invariant:** no Tempus permit, no effect; every effect produces a verifiable
 > receipt.
+
+> **Start here:** read the [integration guide](https://elbuilder77.github.io/tempus-ddb/docs.html),
+> inspect the [synthetic browser trace](https://elbuilder77.github.io/tempus-ddb/trace.html),
+> then use the source and contracts below for a real deployment. The demo has no runtime
+> connection and does not replace `tempus verify-trace`.
 
 The `0.4.0` source tree implements the local permit protocol, signed policy
 bundles, rotation and revocation, a generic mediated executor, Vault Transit signing,
@@ -88,12 +95,13 @@ cannot read the executor's environment or key material.
 
 ## Install
 
-Python 3.10 or newer is required.
-
-Install the published beta from PyPI:
+Python 3.10 or newer is required. The v0.4.0 beta is distributed as
+[GitHub Release assets](https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0),
+not as a verified PyPI package. Download the wheel matching your platform and install its
+local path:
 
 ```bash
-python -m pip install tempus-ddb
+python -m pip install ./tempus_ddb-0.4.0-<platform>.whl
 ```
 
 For development, clone `https://github.com/elbuilder77/tempus-ddb.git` and install
@@ -378,7 +386,10 @@ tempus list-policies
 tempus identity-events
 ```
 
-The future audit console will be read-only and derive its views from these contracts.
+The public [trace demo](https://elbuilder77.github.io/tempus-ddb/trace.html) is a
+synthetic, browser-only illustration of hashes, signatures and record binding. A future
+read-only audit console must derive its views from these contracts; it is not in the
+current source line.
 
 ## Legacy ledger
 

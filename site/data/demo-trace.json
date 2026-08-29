@@ -1,0 +1,71 @@
+{
+  "schema_version": "tempus.site-demo-trace.v1",
+  "fixture_kind": "synthetic-browser-demo",
+  "action_id": "9fe5dc609787e19efbf6a1cc377dc33dc078f06b5f599bce70b8952923e22924",
+  "intent": {
+    "schema_version": "tempus.action-intent.v1",
+    "tenant_id": "example-org",
+    "agent_id": "0d3d54836329a6a9246cca212872f450389ece55226ddddb6487c806d82906aa",
+    "idempotency_key": "site-demo-action-001",
+    "action_type": "github.create_issue",
+    "resource": "example-org/agent-sandbox",
+    "requested_at": 1787040000000000,
+    "input": {
+      "title": "Document the executor boundary",
+      "labels": [
+        "security",
+        "demo"
+      ]
+    },
+    "money": null
+  },
+  "agent_signature": "8ea04634fc86c509803b58b72eba6431f2c9bb76eea4925780c60be53f6637731cfb0c417ec28fdb4603eaee039fcfbdfda21c958be0e36d188c15be7d7d1102",
+  "authorization": {
+    "schema_version": "tempus.authorization-receipt.v1",
+    "action_id": "9fe5dc609787e19efbf6a1cc377dc33dc078f06b5f599bce70b8952923e22924",
+    "tenant_id": "example-org",
+    "agent_id": "0d3d54836329a6a9246cca212872f450389ece55226ddddb6487c806d82906aa",
+    "executor_id": "3626a22aec05a4737fb2a444321af7f8a6121feecab2e8b7a17e2a6b4ae9400e",
+    "gate_id": "0ac733b0f265e379c9855434bb75ad58e2fb386e46ff3583743dec1e0e0a9ae9",
+    "decision": "ALLOWED",
+    "policy_version": "tempus.policy-bundle.v1",
+    "policy_digest": "1f50a22e8c9c3097a6cc19ee8a17e204bd28491af87b724bde72aa564e6fadbc",
+    "intent_hash": "0e89533791a2add49c3c1909cc2bfb7e7514809e04ad14caa59945c554c5454f",
+    "reason_codes": [
+      "IDENTITY_VERIFIED",
+      "POLICY_ALLOWED"
+    ],
+    "issued_at": 1787040000000000,
+    "expires_at": 1787040060000000,
+    "authorization_id": "05e3a394b759d57655cbedb568c9d923ac37004f0d93cb8694dda3a420e2b311",
+    "gate_signature": "6bfa288c8ccc1a94ba430a5f7412aa27c8cb776bd2bef0cac8917711bb1c417ccfd79dace0f28151d19b2a8d9edade7948c482e70f6980e9af5e199457de900f"
+  },
+  "execution": {
+    "outcome": {
+      "schema_version": "tempus.action-outcome.v1",
+      "authorization_id": "05e3a394b759d57655cbedb568c9d923ac37004f0d93cb8694dda3a420e2b311",
+      "action_id": "9fe5dc609787e19efbf6a1cc377dc33dc078f06b5f599bce70b8952923e22924",
+      "executor_id": "3626a22aec05a4737fb2a444321af7f8a6121feecab2e8b7a17e2a6b4ae9400e",
+      "status": "SUCCEEDED",
+      "external_reference": "demo-issue-042",
+      "output": {
+        "issue_number": 42,
+        "repository": "example-org/agent-sandbox"
+      },
+      "executor_signature": "01c98f274cf4dd43189282f2ffcba54f7908d964f5bf939be9f0015656e7aa421497197bb35a73990fdadf60e6859cdf48ff1190412eb1bae8aa46d5d283460f"
+    },
+    "receipt": {
+      "schema_version": "tempus.execution-receipt.v1",
+      "authorization_id": "05e3a394b759d57655cbedb568c9d923ac37004f0d93cb8694dda3a420e2b311",
+      "action_id": "9fe5dc609787e19efbf6a1cc377dc33dc078f06b5f599bce70b8952923e22924",
+      "intent_hash": "0e89533791a2add49c3c1909cc2bfb7e7514809e04ad14caa59945c554c5454f",
+      "outcome_hash": "e02592eaf56cb6fd55168684ca92072326d32aa42be0b230df1e5572a096a50b",
+      "gate_id": "0ac733b0f265e379c9855434bb75ad58e2fb386e46ff3583743dec1e0e0a9ae9",
+      "executor_id": "3626a22aec05a4737fb2a444321af7f8a6121feecab2e8b7a17e2a6b4ae9400e",
+      "status": "SUCCEEDED",
+      "completed_at": 1787040012000000,
+      "receipt_id": "5b449bc1873895ef86d5865c52bc3c58d847e8283a5721dd8644896013fbaf72",
+      "gate_signature": "dae8afb38bd9e9c1356be141aabbde5d5901c6672cfc9d2d9fd48ab91b8cea2c9e7e776af5f3d9324523525b94b19ce66f75cceb46ab880e8aa49a6367848103"
+    }
+  }
+}

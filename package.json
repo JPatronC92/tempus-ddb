@@ -1,0 +1,14 @@
+{
+  "name": "tempus-ddb-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "site:fixture": "node scripts/generate_site_trace_fixture.mjs",
+    "site:validate": "node scripts/validate_site.mjs",
+    "site:build": "node scripts/build_site.mjs"
+  },
+  "devDependencies": {
+    "@openai/sites-vite-plugin": "0.2.0",
+    "vite": "8.2.2"
+  }
+}

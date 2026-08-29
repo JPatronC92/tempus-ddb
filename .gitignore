@@ -48,6 +48,7 @@ ENV/
 # Package and release artifacts
 /build/
 /dist/
+/node_modules/
 *.egg-info/
 .eggs/
 pip-wheel-metadata/
