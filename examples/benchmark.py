@@ -36,7 +36,7 @@ def run_benchmark(records: int, json_output: bool, include_legacy: bool = False)
 
         if not json_output:
             print(f"🔥 Tempus DDB v0.4.0 B2A Protocol Benchmark ({records} actions)...")
-            print(f"📍 Database: SQLite WAL mode | Signer: Ed25519 Native\n")
+            print("📍 Database: SQLite WAL mode | Signer: Ed25519 Native\n")
 
         # -------------------------------------------------------------
         # Phase 1: Action Intent & Permit Issuance (Authorization)
@@ -146,19 +146,19 @@ def run_benchmark(records: int, json_output: bool, include_legacy: bool = False)
         else:
             print("📊 RESULTADOS DEL BENCHMARK B2A:")
             print("-----------------------------------------------------------------")
-            print(f"1️⃣  Emisión de Permisos (Request Action):")
+            print("1️⃣  Emisión de Permisos (Request Action):")
             print(f"    • Acciones procesadas: {records}")
             print(f"    • Tiempo total:        {auth_duration:.3f} s")
             print(f"    • Rendimiento:         {auth_tps:.2f} permisos/s")
             print(f"    • Latencia promedio:   {(auth_duration / records) * 1000:.2f} ms/acción\n")
 
-            print(f"2️⃣  Consumo y Recibos (Commit Outcome):")
+            print("2️⃣  Consumo y Recibos (Commit Outcome):")
             print(f"    • Recibos firmados:    {records}")
             print(f"    • Tiempo total:        {exec_duration:.3f} s")
             print(f"    • Rendimiento:         {exec_tps:.2f} recibos/s")
             print(f"    • Latencia promedio:   {(exec_duration / records) * 1000:.2f} ms/recibo\n")
 
-            print(f"3️⃣  Verificación Criptográfica de Trazas:")
+            print("3️⃣  Verificación Criptográfica de Trazas:")
             print(f"    • Muestra verificada:  {verify_sample_size}/{records} trazas")
             print(f"    • Trazas íntegras:     {verified_count}/{verify_sample_size} (100% VERIFIED)")
             print(f"    • Rendimiento audito:  {verify_tps:.2f} trazas verificadas/s")
