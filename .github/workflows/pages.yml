@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -34,13 +34,13 @@ jobs:
           node-version: 24
       - name: Validate static site
         run: node scripts/validate_site.mjs
-      - uses: actions/configure-pages@v6
+      - uses: actions/configure-pages@v5
       - name: Assemble Pages artifact
         run: |
           mkdir -p site/assets
           cp assets/logo.png site/assets/logo.png
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v4

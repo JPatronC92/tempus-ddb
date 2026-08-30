@@ -29,7 +29,7 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: PyO3/maturin-action@v1
@@ -38,7 +38,7 @@ jobs:
           args: --release --out dist
           manylinux: auto
       - name: Upload wheels
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: PyO3/maturin-action@v1
@@ -56,7 +56,7 @@ jobs:
           command: sdist
           args: --out dist
       - name: Upload sdist
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: sdist
           path: dist
@@ -71,15 +71,15 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v4
         with:
           name: sdist
           path: dist
@@ -89,11 +89,11 @@ jobs:
           --version "${{ github.event.release.tag_name }}"
           --output "sbom/tempus-ddb-${{ github.event.release.tag_name }}.spdx.json"
       - name: Attest release provenance
-        uses: actions/attest@v4
+        uses: actions/attest@v2
         with:
           subject-path: dist/*
       - name: Attest release SBOM
-        uses: actions/attest@v4
+        uses: actions/attest@v2
         with:
           subject-path: dist/*
           sbom-path: sbom/tempus-ddb-${{ github.event.release.tag_name }}.spdx.json
