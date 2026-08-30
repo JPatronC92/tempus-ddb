@@ -34,7 +34,7 @@ jobs:
           node-version: 24
       - name: Validate static site
         run: node scripts/validate_site.mjs
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - name: Assemble Pages artifact
         run: |
           mkdir -p site/assets
