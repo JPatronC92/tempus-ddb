@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#08110d">
-    <meta name="description" content="Tempus DDB keeps a clear, verifiable record around bounded agent actions.">
+    <meta name="description" content="Tempus DDB issues signed permits and records verifiable receipts for mediated agent actions.">
     <meta property="og:title" content="Tempus DDB — Decision records for agent actions">
-    <meta property="og:description" content="Signed requests, bounded permits and records you can verify.">
+    <meta property="og:description" content="Signed permits and verifiable receipts for mediated agent actions.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://elbuilder77.github.io/tempus-ddb/">
     <meta property="og:image" content="https://elbuilder77.github.io/tempus-ddb/og.png">
@@ -14,7 +14,7 @@
     <meta property="og:image:height" content="630">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Tempus DDB — Decision records for agent actions">
-    <meta name="twitter:description" content="Signed requests, bounded permits and records you can verify.">
+    <meta name="twitter:description" content="Signed permits and verifiable receipts for mediated agent actions.">
     <meta name="twitter:image" content="https://elbuilder77.github.io/tempus-ddb/og.png">
     <link rel="stylesheet" href="assets/site.css">
     <title>Tempus DDB — Decision records for agent actions</title>
@@ -37,11 +37,11 @@
         <header class="hero">
           <div>
             <p class="eyebrow">Open source · v0.4.0 beta</p>
-            <h1>A clear record for every agent action.</h1>
-            <p class="lede">Tempus keeps an agent's request separate from the authority to carry it out. It issues a short-lived permit and leaves a record you can verify.</p>
+            <h1>Signed permits for mediated agent actions.</h1>
+            <p class="lede">Tempus DDB is a local-first Rust and Python runtime. Agents sign requests, policy issues short-lived permits, and executors record verifiable outcomes.</p>
             <div class="button-row">
-              <a class="button primary" href="docs.html">Read the guide</a>
-              <a class="button" href="trace.html">View a sample trace</a>
+              <a class="button primary" href="docs.html">Documentation</a>
+              <a class="button" href="trace.html">Trace demo</a>
             </div>
           </div>
           <div class="hero-visual" aria-label="Example Tempus action trace">
@@ -65,8 +65,8 @@
       <section id="protocol">
         <div class="shell">
           <div class="section-heading">
-            <div><p class="eyebrow">How it works</p><h2>A request is not permission.</h2></div>
-            <p class="copy">An agent can ask for an action, but it should not be able to approve its own request. Tempus records the decision, then an executor checks the permit before acting.</p>
+            <div><p class="eyebrow">Protocol</p><h2>Authorize, execute, verify.</h2></div>
+            <p class="copy">The requesting agent signs an intent. Policy returns an allowed or blocked decision. A separate executor verifies and consumes an allowed permit before acting.</p>
           </div>
           <div class="flow-grid" aria-label="Four stages of the Tempus protocol">
             <article class="flow-step"><span class="flow-index">01 / IDENTITY</span><h3>Sign the request</h3><p>The requesting workload signs the exact payload it wants executed.</p></article>
@@ -80,13 +80,13 @@
       <section id="capabilities">
         <div class="shell">
           <div class="section-heading">
-            <div><p class="eyebrow">What is available</p><h2>A small boundary around external actions.</h2></div>
-            <p class="copy">Tempus is a local-first Rust runtime with Python, CLI and MCP interfaces. The executor keeps downstream credentials; the agent does not receive them.</p>
+            <div><p class="eyebrow">Implementation</p><h2>Current components.</h2></div>
+            <p class="copy">The executor retains downstream credentials. The requesting agent does not receive the executor environment, credential or signing key.</p>
           </div>
           <div class="pillar-grid">
-            <article class="pillar"><span class="pillar-label">Control plane</span><h3>Policy and identity evidence</h3><p>Signed, versioned rules and workload lifecycle events are bound to each authorization.</p><ul><li>Ed25519 identities</li><li>Rotation and revocation</li><li>Tenant-scoped delegation</li></ul></article>
-            <article class="pillar"><span class="pillar-label">Execution plane</span><h3>Fail-closed permit use</h3><p>Execution is mediated by a short-lived permit and a single-consumption receipt.</p><ul><li>Deterministic action IDs</li><li>Idempotency safeguards</li><li>UNKNOWN is not retried</li></ul></article>
-            <article class="pillar"><span class="pillar-label">Integration plane</span><h3>Native, CLI and MCP access</h3><p>Use the same boundary in a local runtime, an audit workflow or constrained GitHub automation.</p><ul><li>SQLite-backed ledger</li><li>Vault Transit signer support</li><li>Issue and pull-request adapter</li></ul></article>
+            <article class="pillar"><span class="pillar-label">Identity and policy</span><h3>Signed authorization evidence</h3><p>Versioned rules and workload identity events are bound to each authorization.</p><ul><li>Ed25519 identities</li><li>Rotation and revocation</li><li>Tenant-scoped delegation</li></ul></article>
+            <article class="pillar"><span class="pillar-label">Permit enforcement</span><h3>Fail-closed consumption</h3><p>Short-lived permits are bound to one action and consumed once.</p><ul><li>Deterministic action IDs</li><li>Idempotency safeguards</li><li>UNKNOWN is not retried</li></ul></article>
+            <article class="pillar"><span class="pillar-label">Runtime and interfaces</span><h3>Rust, Python, CLI and MCP</h3><p>Records are stored locally and exposed through the same protocol contracts.</p><ul><li>SQLite-backed ledger</li><li>Vault Transit signer support</li><li>GitHub issue and pull-request adapter</li></ul></article>
           </div>
         </div>
       </section>
@@ -94,18 +94,9 @@
       <section aria-labelledby="boundary-title">
         <div class="shell">
           <div class="boundary">
-            <div><p class="eyebrow">Current limits</p><h2 id="boundary-title">A beta with clear limits.</h2><p>v0.4.0 is local-first and single-instance. It does not yet include distributed permit consumption, independent external checkpoints or a live audit console.</p></div>
-            <div class="boundary-note"><strong>Before production</strong><span>Read the threat model and check the credential boundary around your executor.</span></div>
+            <div><p class="eyebrow">Current limits</p><h2 id="boundary-title">v0.4.0 is local-first and single-instance.</h2><p>It does not include distributed permit consumption, independent external checkpoints or a live audit console.</p></div>
+            <div class="boundary-note"><strong>Threat model</strong><span>Review the executor credential boundary before high-impact use.</span></div>
           </div>
-        </div>
-      </section>
-
-      <section class="final-cta" aria-labelledby="cta-title">
-        <div class="shell">
-          <p class="eyebrow">Start small</p>
-          <h2 id="cta-title">Try one controlled integration.</h2>
-          <p class="copy">Read the guide, inspect the sample trace, then run the source in an environment you control.</p>
-          <div class="button-row"><a class="button primary" href="docs.html">Open the guide</a><a class="button" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Get v0.4.0</a></div>
         </div>
       </section>
     </main>

@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#08110d">
     <meta name="description" content="Integration guidance for Tempus DDB: install a release artifact, establish the executor boundary, and verify action traces.">
     <meta property="og:title" content="Tempus DDB documentation">
-    <meta property="og:description" content="Start with the boundary: signed intent, deterministic policy, single-use permits and verifiable receipts.">
+    <meta property="og:description" content="Install Tempus DDB, configure a mediated executor and verify action traces.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://elbuilder77.github.io/tempus-ddb/docs.html">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Tempus DDB documentation">
-    <meta name="twitter:description" content="Start with the boundary: signed intent, deterministic policy, single-use permits and verifiable receipts.">
+    <meta name="twitter:description" content="Install Tempus DDB, configure a mediated executor and verify action traces.">
     <link rel="stylesheet" href="assets/site.css">
     <title>Documentation · Tempus DDB</title>
   </head>
@@ -31,10 +31,10 @@
     <main id="main-content">
       <div class="shell">
         <header class="page-hero">
-          <p class="eyebrow">Getting started</p>
-          <h1>Set the boundary first.</h1>
-          <p class="lede">Keep the agent that asks for work separate from the executor that holds the downstream credential.</p>
-          <div class="button-row"><a class="button primary" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Download v0.4.0</a><a class="button" href="trace.html">View a sample trace</a></div>
+          <p class="eyebrow">Documentation</p>
+          <h1>Integration guide.</h1>
+          <p class="lede">Install v0.4.0, keep executor credentials outside the agent, and verify the resulting trace.</p>
+          <div class="button-row"><a class="button primary" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Release v0.4.0</a><a class="button" href="trace.html">Trace demo</a></div>
         </header>
       </div>
 
@@ -43,7 +43,7 @@
           <div>
             <article class="doc-card" id="install">
               <p class="eyebrow">01 / Install</p>
-              <h2>Install a release artifact, or build locally.</h2>
+              <h2>Install</h2>
               <p>Python 3.10+ is required. v0.4.0 packages are published as GitHub Release assets; download the wheel that matches your platform, then install its local path. Use the source checkout for development.</p>
               <code>python -m pip install ./tempus_ddb-0.4.0-&lt;platform&gt;.whl
 
@@ -55,7 +55,7 @@ python -m pip install -e ".[dev]"</code>
 
             <article class="doc-card" id="flow">
               <p class="eyebrow">02 / Basic flow</p>
-              <h2>Record the request before the effect.</h2>
+              <h2>Request and execution flow</h2>
               <ol>
                 <li>The agent signs an exact <code>tempus.action-intent.v1</code> request.</li>
                 <li>Tempus verifies identity and deterministic policy, then returns <code>ALLOWED</code> or <code>BLOCKED</code>.</li>
@@ -67,7 +67,7 @@ python -m pip install -e ".[dev]"</code>
 
             <article class="doc-card" id="contracts">
               <p class="eyebrow">03 / Stable contracts</p>
-              <h2>Schemas keep the record readable.</h2>
+              <h2>Stable schemas</h2>
               <table class="contract-table">
                 <thead><tr><th>Evidence</th><th>Schema</th></tr></thead>
                 <tbody>
@@ -83,22 +83,22 @@ python -m pip install -e ".[dev]"</code>
             </article>
 
             <article class="doc-card" id="integration">
-              <p class="eyebrow">04 / Integrate deliberately</p>
-              <h2>Keep the executor focused.</h2>
+              <p class="eyebrow">04 / Integration</p>
+              <h2>Executor integration</h2>
               <p>The generic executor and packaged GitHub adapter both verify permit binding, tenant, expiry and single consumption. The GitHub adapter supports only exact, allowlisted issue and pull-request actions; it keeps its token outside the agent payload.</p>
               <code>tempus init
 tempus keygen --output agent.keys.json
 tempus keygen --output executor.keys.json
 tempus doctor --json
 tempus conformance --signer</code>
-              <p>Run the end-to-end mediated executor scenario in <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/examples/commercial_demo.py">examples/commercial_demo.py</a> to test direct bypass rejection, single-use consumption, replay protection, and trace verification locally:</p>
+              <p>Run <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/examples/commercial_demo.py">examples/commercial_demo.py</a> to test direct bypass rejection, single-use consumption, replay protection, and trace verification locally:</p>
               <code>python examples/commercial_demo.py</code>
               <p>Use the source README for the full Python quickstart, MCP configuration and GitHub executor contract.</p>
             </article>
 
             <article class="doc-card" id="audit">
-              <p class="eyebrow">05 / Read the evidence</p>
-              <h2>Review the record when you need to.</h2>
+              <p class="eyebrow">05 / Trace inspection</p>
+              <h2>Inspect and verify records</h2>
               <code>tempus trace --action-id &lt;action-id&gt;
 tempus verify-trace --action-id &lt;action-id&gt;
 tempus list-agents
@@ -109,7 +109,7 @@ tempus identity-events</code>
 
             <article class="doc-card" id="boundary">
               <p class="eyebrow">06 / Security boundary</p>
-              <h2>Know the current limits.</h2>
+              <h2>Current limits</h2>
               <p>v0.4.0 is local-first and single-instance. It detects alteration of the supported evidence, but does not yet provide distributed permit consumption or independent durable checkpoints for whole-database rollback or deletion detection.</p>
               <p>Review the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/THREAT_MODEL.md">threat model</a> before high-impact use, report issues through the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/SECURITY.md">security policy</a>, and use the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/CONTRIBUTING.md">contribution guide</a> to participate.</p>
             </article>

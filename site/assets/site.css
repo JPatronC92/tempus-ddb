@@ -109,11 +109,6 @@ section { border-top: 1px solid var(--line); padding: clamp(4.4rem, 8vw, 7.4rem)
 .boundary-note { align-self: center; padding-left: 1.2rem; border-left: 2px solid var(--amber); color: var(--muted); }
 .boundary-note strong { display: block; color: var(--amber); font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; }
 .boundary-note span { display: block; margin-top: 0.5rem; }
-.final-cta { padding: clamp(5rem, 9vw, 8.5rem) 0; text-align: center; }
-.final-cta h2 { max-width: 710px; margin-right: auto; margin-left: auto; }
-.final-cta .copy { max-width: 610px; margin: 1.2rem auto 0; }
-.final-cta .button-row { justify-content: center; }
-
 .page-hero { max-width: 820px; padding: clamp(4rem, 8vw, 7.25rem) 0 clamp(3rem, 6vw, 5.25rem); }
 .page-hero h1 { font-size: clamp(3rem, 6.1vw, 5.7rem); }
 .doc-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(250px, 0.6fr); gap: clamp(2rem, 7vw, 6.4rem); align-items: start; }
