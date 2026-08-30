@@ -39,7 +39,7 @@ jobs:
         run: |
           mkdir -p site/assets
           cp assets/logo.png site/assets/logo.png
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
       - id: deployment
