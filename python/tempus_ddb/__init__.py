@@ -32,10 +32,16 @@ except PackageNotFoundError:
 
 from ._tempus_ddb import TempusDDB, TempusExecutor, gen_keys
 from .github_executor import GitHubExecutorAdapter, UnknownExecutionError
+from .http_executor import HttpExecutorAdapter
 from .mcp_server import main_sync
+from .payment_executor import PaymentExecutorAdapter
+from .slack_executor import SlackExecutorAdapter
 
 __all__ = [
     "GitHubExecutorAdapter",
+    "HttpExecutorAdapter",
+    "PaymentExecutorAdapter",
+    "SlackExecutorAdapter",
     "TempusDDB",
     "TempusExecutor",
     "UnknownExecutionError",

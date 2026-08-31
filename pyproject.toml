@@ -50,6 +50,9 @@ Issues = "https://github.com/elbuilder77/tempus-ddb/issues"
 [project.scripts]
 tempus = "tempus_ddb.cli:main"
 tempus-github-executor = "tempus_ddb.github_executor:main"
+tempus-http-executor = "tempus_ddb.http_executor:main"
+tempus-slack-executor = "tempus_ddb.slack_executor:main"
+tempus-payment-executor = "tempus_ddb.payment_executor:main"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

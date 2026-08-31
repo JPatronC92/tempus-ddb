@@ -91,16 +91,30 @@
         </div>
       </section>
 
+      <section id="differentiation">
+        <div class="shell">
+          <div class="section-heading">
+            <div><p class="eyebrow">Architecture</p><h2>Why not a traditional RBAC gateway?</h2></div>
+            <p class="copy">MCP proxies authorize and forward requests, trusting the backend. Tempus enforces a cryptographic single-use toll with dual-signed execution receipts and complete credential isolation.</p>
+          </div>
+          <div class="pillar-grid">
+            <article class="pillar"><span class="pillar-label">Zero-Trust Toll</span><h3>Cryptographic Permits</h3><p>Unlike RBAC proxies that simply forward calls, Tempus issues expiring, single-use signed permits bound to the exact intent hash.</p><ul><li>Deterministic intent binding</li><li>Atomic single consumption</li><li>Replay attempts fail closed</li></ul></article>
+            <article class="pillar"><span class="pillar-label">Credential Isolation</span><h3>Isolated Executors</h3><p>The requesting AI agent never touches or sees downstream tokens. Dedicated executors hold secrets in their own isolated process.</p><ul><li>GitHub Issues & PRs</li><li>HTTPS POST/PUT Webhooks</li><li>Slack Messages & Payouts</li></ul></article>
+            <article class="pillar"><span class="pillar-label">Verifiable Evidence</span><h3>Dual-Signed Receipts</h3><p>Both Gate and Executor sign the outcome. Anyone can verify the entire trace mathematically offline without trusting application logs.</p><ul><li>Ed25519 signatures</li><li>SHA-256 state chain</li><li>Universal money contract</li></ul></article>
+          </div>
+        </div>
+      </section>
+
       <section id="capabilities">
         <div class="shell">
           <div class="section-heading">
-            <div><p class="eyebrow">Implementation</p><h2>Current components.</h2></div>
-            <p class="copy">The executor retains downstream credentials. The requesting agent does not receive the executor environment, credential or signing key.</p>
+            <div><p class="eyebrow">Implementation</p><h2>Four packaged executors.</h2></div>
+            <p class="copy">Tempus provides out-of-the-box mediated adapters that keep downstream credentials strictly outside the agent's environment.</p>
           </div>
           <div class="pillar-grid">
-            <article class="pillar"><span class="pillar-label">Identity and policy</span><h3>Signed authorization evidence</h3><p>Versioned rules and workload identity events are bound to each authorization.</p><ul><li>Ed25519 identities</li><li>Rotation and revocation</li><li>Tenant-scoped delegation</li></ul></article>
-            <article class="pillar"><span class="pillar-label">Permit enforcement</span><h3>Fail-closed consumption</h3><p>Short-lived permits are bound to one action and consumed once.</p><ul><li>Deterministic action IDs</li><li>Idempotency safeguards</li><li>UNKNOWN is not retried</li></ul></article>
-            <article class="pillar"><span class="pillar-label">Runtime and interfaces</span><h3>Rust, Python, CLI and MCP</h3><p>Records are stored locally and exposed through the same protocol contracts.</p><ul><li>SQLite-backed ledger</li><li>Vault Transit signer support</li><li>GitHub issue and pull-request adapter</li></ul></article>
+            <article class="pillar"><span class="pillar-label">GitHub Adapter</span><h3>tempus-github-executor</h3><p>Audited GitHub issue and pull request creation with isolated <code>GITHUB_TOKEN</code>.</p><ul><li>Create issues & PRs</li><li>Allowlisted arguments</li><li>Replay protection</li></ul></article>
+            <article class="pillar"><span class="pillar-label">HTTP & Slack Adapters</span><h3>Webhooks & Notifications</h3><p>Generic HTTPS POST/PUT webhook dispatcher and Slack alert executor with isolated secrets.</p><ul><li>tempus-http-executor</li><li>tempus-slack-executor</li><li>Secret header injection</li></ul></article>
+            <article class="pillar"><span class="pillar-label">Financial Adapter</span><h3>tempus-payment-executor</h3><p>Enforces the universal <code>money</code> contract for payouts, disbursements and charges.</p><ul><li>Strict minor-unit limits</li><li>Currency allowlists</li><li>Isolated payment API keys</li></ul></article>
           </div>
         </div>
       </section>

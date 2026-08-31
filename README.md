@@ -59,6 +59,20 @@ Tempus DDB creates an enforced **B2A (Bot-to-Agent / Bot-to-Action) Security Bou
 
 ---
 
+## ⚔️ Why Tempus vs Traditional RBAC / MCP Gateways?
+
+In 2026, several MCP governance proxies (such as Bifrost, Obot, MCPX, MintMCP) manage agent access using role-based access control (RBAC). **Tempus DDB solves a completely different, deeper architectural problem:**
+
+| Dimension | Traditional MCP Gateways (RBAC / Proxies) | Tempus DDB (B2A Toll Gate) |
+|---|---|---|
+| **Security Model** | **Authorize & Forward (*"Trust"*):** Checks rules, forwards requests, and trusts the agent and downstream service. | **Cryptographic Toll (*"Zero-Trust"*):** Agent signs intent; Gate issues single-use permit; Executor consumes permit atomically. |
+| **Credential Boundary** | Agent or Gateway proxy holds raw API keys and database credentials. | **Strict Credential Isolation:** Agent *never* sees or handles downstream secrets (`GITHUB_TOKEN`, Slack tokens, API keys). |
+| **Replay & Loop Prevention** | Advisory rate limits; repeated calls within role permissions pass through. | **Cryptographic Single Consumption:** Consumed permits are permanently invalidated. Replay attempts fail closed. |
+| **Tamper Detection** | Server application logs (which can be modified, truncated, or forged). | **Dual-Signed Immutable Receipts:** Cryptographically linked (Ed25519 + SHA-256) and verifiable offline by anyone. |
+| **Financial / High-Impact Actions** | Unstructured JSON payloads. | **Universal `money` Contract:** Hard limits, currency enforcement, and tenant-scoped asset ceilings. |
+
+---
+
 ## 🔍 Interactive Trace Demo
 
 Inspect how Tempus binds the entire lifecycle (Intent ➔ Authorization ➔ Execution ➔ Receipt) with Ed25519 signatures and SHA-256 state hashes:
@@ -329,38 +343,66 @@ Additional standalone scripts in `examples/`:
 python examples/full_agent_flow.py
 ```
 
-## GitHub executor
+## Packaged Mediated Executors
 
-The installed `tempus-github-executor` command performs real GitHub REST writes for two
-exact action types:
+Tempus includes four official, credential-isolated executors out of the box. The requesting AI agent *never* holds downstream API keys or secrets.
 
-- `github.create_issue`, with `resource` set to `owner/repository` and allowlisted
-  `title`, `body`, and `labels` input fields.
-- `github.create_pull_request`, with `resource` set to `owner/repository` and
-  allowlisted `title`, `head`, `base`, `body`, and `draft` input fields.
+### 1. GitHub Executor (`tempus-github-executor`)
+Performs audited GitHub REST writes with an isolated `GITHUB_TOKEN`:
+- `github.create_issue`: `owner/repository` with allowlisted `title`, `body`, `labels`.
+- `github.create_pull_request`: `owner/repository` with allowlisted `title`, `head`, `base`, `body`, `draft`.
 
-The executor reads `GITHUB_TOKEN` from its own environment. Do not put that variable in
-the requesting agent's environment or include credentials in an intent.
-
-```powershell
-$env:GITHUB_TOKEN = '<executor-only token>'
-tempus-github-executor `
-  --permit permit.json `
-  --executor-db github-executor.db `
-  --executor-keyfile executor.keys.json `
-  --gate-id <gate-public-key> `
+```bash
+tempus-github-executor \
+  --permit permit.json \
+  --executor-db github-executor.db \
+  --executor-keyfile executor.keys.json \
+  --gate-id <gate-public-key> \
   --tenant-id acme
 ```
 
-The executor reuses a bounded SQLite connection pool (eight connections by default).
-Use `--executor-pool-size` to tune that local concurrency limit for the deployment. SQLite
-still serializes writes; this removes per-operation connection setup but does not claim
-horizontal or multi-region durability.
+### 2. HTTP & Webhook Executor (`tempus-http-executor`)
+Executes HTTPS POST/PUT webhooks and external API mutations while isolating authorization headers:
+- Supported actions: `http.post`, `http.put`, `webhook.send`.
 
-The command emits a signed `tempus.action-outcome.v1`. Submit it to the gate through
-`commit_outcome_signed(...)` or `tempus_commit_outcome_signed`. Exit code `2` means the
-external result is `UNKNOWN`; the signed observation must be investigated and the
-operation must not be retried automatically.
+```bash
+tempus-http-executor \
+  --permit permit.json \
+  --executor-db http-executor.db \
+  --executor-keyfile executor.keys.json \
+  --gate-id <gate-public-key> \
+  --tenant-id acme \
+  --auth-header "Bearer <isolated-api-secret>"
+```
+
+### 3. Slack Executor (`tempus-slack-executor`)
+Dispatches channel alerts and notifications while isolating `SLACK_BOT_TOKEN`:
+- Supported actions: `slack.post_message`, `slack.send_alert`.
+
+```bash
+tempus-slack-executor \
+  --permit permit.json \
+  --executor-db slack-executor.db \
+  --executor-keyfile executor.keys.json \
+  --gate-id <gate-public-key> \
+  --tenant-id acme \
+  --token "xoxb-<isolated-slack-bot-token>"
+```
+
+### 4. Financial / Payment Executor (`tempus-payment-executor`)
+Executes payouts and financial transfers strictly bound by the universal `money` envelope:
+- Supported actions: `finance.disburse`, `finance.transfer`, `payment.charge`.
+- Enforces asset limits, currency validation, and isolated payment provider keys (`STRIPE_SECRET_KEY`, bank credentials).
+
+```bash
+tempus-payment-executor \
+  --permit permit.json \
+  --executor-db pay-executor.db \
+  --executor-keyfile executor.keys.json \
+  --gate-id <gate-public-key> \
+  --tenant-id acme \
+  --secret-key "sk_live_<isolated-payment-key>"
+```
 
 ## Performance Benchmarks
 
