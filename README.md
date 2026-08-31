@@ -271,6 +271,22 @@ For remote transports, use `request_action_signed(...)` and
 `commit_outcome_signed(...)`. The requesting agent and executor sign locally, so their
 private keys and keyfiles never enter the gate process.
 
+## 📚 Cookbooks & Framework Integrations
+
+Explore practical integration recipes in the [cookbooks/](cookbooks/) directory:
+
+- [🦜🔗 **LangChain & LangGraph Guard**](cookbooks/langchain_agent_guard.py) — Wrap sensitive tools (DB writes, payouts) with fail-closed cryptographic permits.
+- [👥 **CrewAI Multi-Agent Financial Gate**](cookbooks/crewai_action_gate.py) — Multi-agent delegation where executors require signed gate permits before executing effects.
+- [🔌 **Claude Desktop & Cursor MCP Quickstart**](cookbooks/mcp_cursor_claude_quickstart.md) — Connect Tempus DDB as an autonomous Model Context Protocol server in 2 minutes.
+
+```bash
+# Run the LangChain guard recipe
+python cookbooks/langchain_agent_guard.py
+
+# Run the CrewAI financial gate recipe
+python cookbooks/crewai_action_gate.py
+```
+
 ## Demos and Scenarios
 
 The repository includes runnable end-to-end demonstrations covering security guards, B2A flow, and tamper detection:
