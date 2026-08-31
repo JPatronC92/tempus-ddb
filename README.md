@@ -32,8 +32,8 @@ pip install tempus-ddb
 ---
 </div>
 
-> **Status: beta (`0.4.0` source line).** Signed policy, identity lifecycle,
-> Vault-backed signing, and the single-instance GitHub executor are implemented.
+> **Status: beta (`0.4.1` source line).** Signed policy, identity lifecycle,
+> Vault-backed signing, and 4 credential-isolated executors are implemented.
 > Distributed permit consumption and independent external checkpoints are not.
 >
 > [Project site](https://elbuilder77.github.io/tempus-ddb/) ·
@@ -162,15 +162,16 @@ cannot read the executor's environment or key material.
 
 Python 3.10 or newer is required.
 
-### 1. From PyPI (Standard)
+### 1. From PyPI (Standard & Verified)
+Tempus DDB is published to PyPI using **Trusted Publishing (OIDC)** and **Sigstore provenance attestations** on every artifact:
 ```bash
-pip install tempus-ddb
+python -m pip install tempus-ddb
 ```
 
-### 2. From GitHub Release Wheels
-Download the wheel matching your platform from [GitHub Releases](https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0) and install:
+### 2. From GitHub Release Wheels & SBOM
+Download the pre-built native wheel matching your platform or the SPDX SBOM from [GitHub Releases v0.4.1](https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.1):
 ```bash
-pip install ./tempus_ddb-0.4.0-<platform>.whl
+pip install ./tempus_ddb-0.4.1-<platform>.whl
 ```
 
 ### 3. From Source (Development)

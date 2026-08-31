@@ -33,8 +33,8 @@
         <header class="page-hero">
           <p class="eyebrow">Documentation</p>
           <h1>Integration guide.</h1>
-          <p class="lede">Install v0.4.0, keep executor credentials outside the agent, and verify the resulting trace.</p>
-          <div class="button-row"><a class="button primary" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Release v0.4.0</a><a class="button" href="trace.html">Trace demo</a></div>
+          <p class="lede">Install v0.4.1, keep executor credentials outside the agent, and verify the resulting trace.</p>
+          <div class="button-row"><a class="button primary" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.1">Release v0.4.1</a><a class="button" href="trace.html">Trace demo</a></div>
         </header>
       </div>
 
@@ -43,19 +43,14 @@
           <div>
             <article class="doc-card" id="install">
               <p class="eyebrow">01 / Install</p>
-              <h2>Install</h2>
-              <p>Python 3.10+ is required. Install Tempus DDB via PyPI, download pre-built wheels from GitHub Releases, or install from source:</p>
-              <code># Standard install from PyPI
-pip install tempus-ddb
-
-# Or install latest release from GitHub wheel
-pip install ./tempus_ddb-0.4.0-&lt;platform&gt;.whl
-
-# Or install from source for development
-git clone https://github.com/elbuilder77/tempus-ddb.git
+              <h2>Install the verified PyPI release.</h2>
+              <p>Python 3.10+ is required. Tempus DDB is published to PyPI with <strong>Trusted Publishing</strong> and <strong>Sigstore attestation</strong> on every artifact — verify the provenance before you trust the binary, not just the package name.</p>
+              <code>python -m pip install tempus-ddb</code>
+              <p>For development, or to inspect the attested source before installing:</p>
+              <code>git clone https://github.com/elbuilder77/tempus-ddb.git
 cd tempus-ddb
-pip install -e ".[dev]"</code>
-              <p><a href="https://pypi.org/project/tempus-ddb/">View Tempus DDB on PyPI</a> · <a href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Browse GitHub Release assets</a></p>
+python -m pip install -e ".[dev]"</code>
+              <p><a href="https://pypi.org/project/tempus-ddb/">View verified package on PyPI</a> · <a href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.1">Platform-specific wheels & SBOM are available as GitHub Release assets</a>.</p>
             </article>
 
             <article class="doc-card" id="flow">
@@ -115,7 +110,7 @@ tempus identity-events</code>
             <article class="doc-card" id="boundary">
               <p class="eyebrow">06 / Security boundary</p>
               <h2>Current limits</h2>
-              <p>v0.4.0 is local-first and single-instance. It detects alteration of the supported evidence, but does not yet provide distributed permit consumption or independent durable checkpoints for whole-database rollback or deletion detection.</p>
+              <p>v0.4.1 is local-first and single-instance. It detects alteration of the supported evidence, but does not yet provide distributed permit consumption or independent durable checkpoints for whole-database rollback or deletion detection.</p>
               <p>Review the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/THREAT_MODEL.md">threat model</a> before high-impact use, report issues through the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/SECURITY.md">security policy</a>, and use the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/CONTRIBUTING.md">contribution guide</a> to participate.</p>
             </article>
           </div>
