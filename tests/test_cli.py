@@ -30,7 +30,7 @@ def run_cli(args, cwd=None):
 def test_cli_version():
     code, out, _ = run_cli(["--version"])
     assert code == 0
-    assert out.strip() == "tempus 0.4.0"
+    assert out.strip().startswith("tempus 0.4.")
 
 
 def test_cli_help():

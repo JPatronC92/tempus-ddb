@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.1] - 2026-08-31
+
+### Added
+- **Packaged Mediated Executors**: Added `tempus-http-executor` (generic HTTPS POST/PUT webhooks with isolated headers), `tempus-slack-executor` (isolated `SLACK_BOT_TOKEN`), and `tempus-payment-executor` (binding the universal `money` contract envelope and isolating payout secrets).
+- **Cookbooks & Framework Integrations**: Added copy-paste recipes for **LangChain/LangGraph** tool guarding, **CrewAI** multi-agent financial delegation, and **Claude Desktop & Cursor MCP** autonomous setup.
+- **Architectural Differentiation**: Added explicit technical comparison between Tempus DDB B2A zero-trust cryptographic toll and traditional RBAC/MCP proxies (Bifrost, Obot, MCPX, MintMCP).
+- Exported `HttpExecutorAdapter`, `SlackExecutorAdapter`, and `PaymentExecutorAdapter` in the Python package root.
 
 ## [0.4.0] - 2026-08-27
 
