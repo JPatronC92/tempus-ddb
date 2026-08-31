@@ -113,8 +113,10 @@ jobs:
           tag: ${{ github.event.release.tag_name }}
           overwrite: true
 
-      # Publish to PyPI using Trusted Publishing (recommended: configure at pypi.org/manage/project/tempus_ddb/settings/publishing/)
+      # Publish to PyPI using Trusted Publishing (OIDC) or PYPI_API_TOKEN secret
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          skip-existing: true
+          password: ${{ secrets.PYPI_API_TOKEN }}

@@ -23,9 +23,12 @@ Typical usage:
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("tempus_ddb")
+    __version__ = version("tempus-ddb")
 except PackageNotFoundError:
-    __version__ = "0.4.0.dev0"
+    try:
+        __version__ = version("tempus_ddb")
+    except PackageNotFoundError:
+        __version__ = "0.4.0"
 
 from ._tempus_ddb import TempusDDB, TempusExecutor, gen_keys
 from .github_executor import GitHubExecutorAdapter, UnknownExecutionError

@@ -44,13 +44,18 @@
             <article class="doc-card" id="install">
               <p class="eyebrow">01 / Install</p>
               <h2>Install</h2>
-              <p>Python 3.10+ is required. v0.4.0 packages are published as GitHub Release assets; download the wheel that matches your platform, then install its local path. Use the source checkout for development.</p>
-              <code>python -m pip install ./tempus_ddb-0.4.0-&lt;platform&gt;.whl
+              <p>Python 3.10+ is required. Install Tempus DDB via PyPI, download pre-built wheels from GitHub Releases, or install from source:</p>
+              <code># Standard install from PyPI
+pip install tempus-ddb
 
+# Or install latest release from GitHub wheel
+pip install ./tempus_ddb-0.4.0-&lt;platform&gt;.whl
+
+# Or install from source for development
 git clone https://github.com/elbuilder77/tempus-ddb.git
 cd tempus-ddb
-python -m pip install -e ".[dev]"</code>
-              <p><a href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Browse the platform-specific v0.4.0 assets</a>. Do not rely on an unverified PyPI package name for this beta line.</p>
+pip install -e ".[dev]"</code>
+              <p><a href="https://pypi.org/project/tempus-ddb/">View Tempus DDB on PyPI</a> · <a href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0">Browse GitHub Release assets</a></p>
             </article>
 
             <article class="doc-card" id="flow">

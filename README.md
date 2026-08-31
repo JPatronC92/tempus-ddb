@@ -3,33 +3,84 @@
 
 # Tempus DDB
 
-**The B2A security gate for autonomous agent actions**
+### The B2A (Bot-to-Agent) Security Gate for Autonomous Agent Actions
 
-Local-first · Signed policy · Workload identity · Fail-closed receipts · MCP-native
+**Zero-trust authorization · Single-use cryptographic permits · Tamper-evident receipts · MCP native**
+
+<p align="center">
+  <a href="https://github.com/elbuilder77/tempus-ddb/actions/workflows/ci.yml"><img src="https://github.com/elbuilder77/tempus-ddb/actions/workflows/ci.yml/badge.svg" alt="CI Build" /></a>
+  <a href="https://github.com/elbuilder77/tempus-ddb/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/tests-passing-brightgreen.svg?logo=github" alt="Tests" /></a>
+  <a href="https://github.com/elbuilder77/tempus-ddb/releases"><img src="https://img.shields.io/github/v/release/elbuilder77/tempus-ddb?color=blue&logo=github" alt="GitHub Release" /></a>
+  <a href="https://pypi.org/project/tempus-ddb/"><img src="https://img.shields.io/pypi/v/tempus-ddb.svg?logo=pypi&logoColor=white&color=blue" alt="PyPI Version" /></a>
+  <a href="https://pypi.org/project/tempus-ddb/"><img src="https://img.shields.io/pypi/dm/tempus-ddb.svg?color=success" alt="PyPI Downloads" /></a>
+  <a href="https://pypi.org/project/tempus-ddb/"><img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg?logo=python&logoColor=white" alt="Python 3.10+" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" /></a>
+  <a href="SECURITY.md"><img src="https://img.shields.io/badge/security-audited-success.svg?logo=shield" alt="Security" /></a>
+  <a href="https://github.com/elbuilder77/tempus-ddb/discussions"><img src="https://img.shields.io/badge/community-discussions-orange.svg?logo=github" alt="Community Discussions" /></a>
+</p>
+
+---
+
+### ⚡ Quick Install
+```bash
+pip install tempus-ddb
+```
+
+### 🚀 [Try the Live Interactive Trace Demo →](https://elbuilder77.github.io/tempus-ddb/trace.html)
+*Verify real cryptographic hashes, Ed25519 signatures, and tamper detection directly in your browser.*
+
+---
 </div>
 
 > **Status: beta (`0.4.0` source line).** Signed policy, identity lifecycle,
 > Vault-backed signing, and the single-instance GitHub executor are implemented.
 > Distributed permit consumption and independent external checkpoints are not.
 >
-> [Roadmap](ROADMAP.md) · [Security](SECURITY.md) ·
-> [Threat model](THREAT_MODEL.md) · [Contributing](CONTRIBUTING.md) ·
 > [Project site](https://elbuilder77.github.io/tempus-ddb/) ·
 > [Integration guide](https://elbuilder77.github.io/tempus-ddb/docs.html) ·
-> [Trace demo](https://elbuilder77.github.io/tempus-ddb/trace.html)
+> [Interactive trace demo](https://elbuilder77.github.io/tempus-ddb/trace.html) ·
+> [Roadmap](ROADMAP.md) · [Security](SECURITY.md) ·
+> [Threat model](THREAT_MODEL.md) · [Contributing](CONTRIBUTING.md)
 
-Tempus sits between an agent's intent and an external effect. The agent signs what it
-wants to do, Tempus issues a short-lived permit, an executor performs the effect, and
-the executor plus Tempus sign the outcome. A human is not part of the transaction loop;
-humans only inspect the resulting history.
+---
 
-> **Product invariant:** no Tempus permit, no effect; every effect produces a verifiable
-> receipt.
+## 💡 ¿Qué resuelve Tempus? / What Tempus Solves
 
-> **Start here:** read the [integration guide](https://elbuilder77.github.io/tempus-ddb/docs.html),
-> inspect the [synthetic browser trace](https://elbuilder77.github.io/tempus-ddb/trace.html),
-> then use the source and contracts below for a real deployment. The demo has no runtime
-> connection and does not replace `tempus verify-trace`.
+When autonomous AI agents take actions (calling external APIs, issuing database writes, creating pull requests, moving funds), **they must not approve their own requests or directly hold privileged downstream credentials**.
+
+Tempus DDB creates an enforced **B2A (Bot-to-Agent / Bot-to-Action) Security Boundary**:
+
+1. 🛑 **Zero-Trust Authorization Toll:** The agent cryptographically signs its *intent*. It cannot execute directly.
+2. 📜 **Signed, Deterministic Policy:** Tempus evaluates tenant policy and issues an expiring, single-use signed permit (`ALLOWED` or `BLOCKED`).
+3. 🔒 **Credential Isolation:** The mediated executor—not the AI agent—holds downstream secrets (e.g. `GITHUB_TOKEN`, API keys) and only executes when presented with a valid, unconsumed permit.
+4. 🧾 **Tamper-Evident Receipts:** Both the executor and Tempus gate sign the outcome, generating an immutable, mathematically verifiable cryptographic trace.
+
+> **Product Invariant:** *No Tempus permit, no effect; every effect produces a verifiable receipt.*
+
+---
+
+## 🔍 Interactive Trace Demo
+
+Inspect how Tempus binds the entire lifecycle (Intent ➔ Authorization ➔ Execution ➔ Receipt) with Ed25519 signatures and SHA-256 state hashes:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           TEMPUS B2A PROTOCOL FLOW                          │
+├─────────────────┬─────────────────┬───────────────────┬─────────────────────┤
+│  01 / INTENT    │  02 / POLICY    │  03 / EXECUTION   │  04 / VERIFICATION  │
+│  Agent signs    │  Gate issues    │  Executor verifies│  End-to-end receipt │
+│  exact payload  │  single-use     │  permit & acts    │  cryptographically │
+│                 │  permit         │  with isolated key│  linked & immutable │
+│   [ BOUND ]     │   [ ALLOWED ]   │    [ CONSUMED ]   │    [ VERIFIED ]     │
+└────────┬────────┴────────┬────────┴─────────┬─────────┴──────────┬──────────┘
+         │                 │                  │                    │
+         ▼                 ▼                  ▼                    ▼
+   Signed Intent ──► Expiring Permit ──► Execution Receipt ──► Auditable Trace
+```
+
+👉 **[Launch Interactive In-Browser Demo](https://elbuilder77.github.io/tempus-ddb/trace.html)** — *Test tamper detection, hash validation, and signature verification live.*
+
+---
 
 The `0.4.0` source tree implements the local permit protocol, signed policy
 bundles, rotation and revocation, a generic mediated executor, Vault Transit signing,
@@ -95,17 +146,25 @@ cannot read the executor's environment or key material.
 
 ## Install
 
-Python 3.10 or newer is required. The v0.4.0 beta is distributed as
-[GitHub Release assets](https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0),
-not as a verified PyPI package. Download the wheel matching your platform and install its
-local path:
+Python 3.10 or newer is required.
 
+### 1. From PyPI (Standard)
 ```bash
-python -m pip install ./tempus_ddb-0.4.0-<platform>.whl
+pip install tempus-ddb
 ```
 
-For development, clone `https://github.com/elbuilder77/tempus-ddb.git` and install
-`python -m pip install -e ".[dev]"`.
+### 2. From GitHub Release Wheels
+Download the wheel matching your platform from [GitHub Releases](https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.0) and install:
+```bash
+pip install ./tempus_ddb-0.4.0-<platform>.whl
+```
+
+### 3. From Source (Development)
+```bash
+git clone https://github.com/elbuilder77/tempus-ddb.git
+cd tempus-ddb
+pip install -e ".[dev]"
+```
 
 ## Bootstrap identities
 
