@@ -15,7 +15,7 @@
   <a href="https://pypi.org/project/tempus-ddb/"><img src="https://img.shields.io/pypi/dm/tempus-ddb.svg?color=success" alt="PyPI Downloads" /></a>
   <a href="https://pypi.org/project/tempus-ddb/"><img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg?logo=python&logoColor=white" alt="Python 3.10+" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" /></a>
-  <a href="SECURITY.md"><img src="https://img.shields.io/badge/security-audited-success.svg?logo=shield" alt="Security" /></a>
+  <a href="SECURITY.md"><img src="https://img.shields.io/badge/security-policy-blue.svg?logo=shield" alt="Security Policy" /></a>
   <a href="https://github.com/elbuilder77/tempus-ddb/discussions"><img src="https://img.shields.io/badge/community-discussions-orange.svg?logo=github" alt="Community Discussions" /></a>
 </p>
 
@@ -32,7 +32,7 @@ pip install tempus-ddb
 ---
 </div>
 
-> **Status: beta (`0.4.1` source line).** Signed policy, identity lifecycle,
+> **Status: beta (`0.4.2` source line).** Signed policy, identity lifecycle,
 > Vault-backed signing, and 4 credential-isolated executors are implemented.
 > Distributed permit consumption and independent external checkpoints are not.
 >
@@ -96,9 +96,9 @@ Inspect how Tempus binds the entire lifecycle (Intent ➔ Authorization ➔ Exec
 
 ---
 
-The `0.4.0` source tree implements the local permit protocol, signed policy
-bundles, rotation and revocation, a generic mediated executor, Vault Transit signing,
-and a packaged credential-isolated GitHub REST adapter. It does **not** yet include
+The `0.4.2` source tree implements the local permit protocol, signed policy
+bundles, rotation and revocation, generic and specialized mediated executors (GitHub, HTTP/Webhooks, Slack, and Pluggable Payments), Vault Transit signing,
+and single-instance replay protection. It does **not** yet include
 distributed permit consumption, external checkpoints, or a web audit console. Read
 [THREAT_MODEL.md](THREAT_MODEL.md) before relying on the current security boundary.
 
@@ -169,9 +169,9 @@ python -m pip install tempus-ddb
 ```
 
 ### 2. From GitHub Release Wheels & SBOM
-Download the pre-built native wheel matching your platform or the SPDX SBOM from [GitHub Releases v0.4.1](https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.1):
+Download the pre-built native wheel matching your platform or the SPDX SBOM from [GitHub Releases v0.4.2](https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.2):
 ```bash
-pip install ./tempus_ddb-0.4.1-<platform>.whl
+pip install ./tempus_ddb-0.4.2-<platform>.whl
 ```
 
 ### 3. From Source (Development)
@@ -206,12 +206,10 @@ in [docs/VAULT_TRANSIT_SIGNER.md](docs/VAULT_TRANSIT_SIGNER.md); the workload au
 to Vault without placing a private key in the file.
 
 ## Install a production policy
+## Install a signed policy bundle
 
-Bootstrap installs a signed compatibility baseline so the first local flow works; it is
-not a production allowlist. Before a production effect, copy
-`config/policy.github.example.json`, replace the repository scope
-and executor public key, then install it. A new policy version retires the previous active
-policy for the same tenant without deleting historical bundles.
+Policies define allowed tenants, agents, actions, resources, rate ceilings, minor-unit
+currency limits, and authorized executors.
 
 ```bash
 tempus install-policy --policy acme-github-policy.json
@@ -390,10 +388,10 @@ tempus-slack-executor \
   --token "xoxb-<isolated-slack-bot-token>"
 ```
 
-### 4. Financial / Payment Executor (`tempus-payment-executor`)
-Executes payouts and financial transfers strictly bound by the universal `money` envelope:
+### 4. Pluggable Financial Adapter (`tempus-payment-executor`)
+Reference pluggable executor that enforces the universal `money` envelope (`amount`, `asset`, `beneficiary`) and minor-unit limits with credential isolation:
 - Supported actions: `finance.disburse`, `finance.transfer`, `payment.charge`.
-- Enforces asset limits, currency validation, and isolated payment provider keys (`STRIPE_SECRET_KEY`, bank credentials).
+- **Bring Your Own Provider:** Implements a pluggable `PaymentTransport` interface. Shipped with a deterministic mock transport for verification and testing; plug in your real Stripe/Wise API client at the transport boundary without exposing payment keys to the AI agent.
 
 ```bash
 tempus-payment-executor \

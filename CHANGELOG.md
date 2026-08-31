@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2] - 2026-08-31
+
+### Changed
+- **Pluggable Financial Transport**: Clarified `tempus-payment-executor` and `PaymentExecutorAdapter` architecture as a pluggable reference adapter with `MockPaymentTransport` for CI/testing and `PaymentTransport` protocol for custom production payment gateways (Stripe, Wise, banking APIs).
+- **Security Policy Badge**: Replaced unverified audit badge with `security-policy` badge linking to `SECURITY.md`.
+- **Documentation & Install Synchronization**: Synchronized install guidance across README, PyPI metadata, and GitHub Pages emphasizing Sigstore provenance attestations and OIDC Trusted Publishing.
+
 ## [0.4.1] - 2026-08-31
 
 ### Added

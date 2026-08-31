@@ -1,4 +1,12 @@
-"""Credential-isolated Financial / Payment executor for Tempus permits."""
+"""Credential-isolated Financial / Payment executor for Tempus permits.
+
+This adapter enforces the universal `money` contract envelope (`amount`, `asset`, `beneficiary`),
+validates minor-unit limits against tenant policy, and keeps payment credentials isolated.
+
+It implements a pluggable `PaymentTransport` interface. Teams can inject their production
+payment provider (Stripe, Wise, banking API) at runtime or rely on the deterministic
+`MockPaymentTransport` for automated testing and CI.
+"""
 
 import argparse
 import json
@@ -14,23 +22,26 @@ class PaymentExecutorError(RuntimeError):
 
 
 class PaymentTransport(Protocol):
-    """Transport protocol for financial transactions."""
+    """Pluggable transport protocol for mediated financial transactions.
+    
+    Implement this protocol to connect your production payment provider
+    (e.g., Stripe, Wise, Modern Treasury, ACH/Wire gateways).
+    """
 
     def disburse(
         self, secret_key: str, amount: str, asset: str, beneficiary: str, metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute one mediated payout."""
+        """Execute one mediated payout using the isolated secret key."""
 
 
 class MockPaymentTransport:
-    """Deterministic payment transport with isolated credentials."""
+    """Reference deterministic payment transport for testing and simulation."""
 
     def disburse(
         self, secret_key: str, amount: str, asset: str, beneficiary: str, metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         if not secret_key:
             raise PaymentExecutorError("Payment provider secret key is missing")
-        # In real deployments, calls Stripe/Wise/Banking APIs with the isolated secret key
         tx_id = f"tx_mock_{os.urandom(8).hex()}"
         return {
             "status": "SETTLED",
@@ -43,7 +54,7 @@ class MockPaymentTransport:
 
 
 class PaymentExecutorAdapter:
-    """Mediated executor that enforces financial limits and isolates payout secrets."""
+    """Mediated executor that enforces financial limits, isolates secrets, and delegates to a pluggable transport."""
 
     SUPPORTED_ACTIONS = {"finance.disburse", "finance.transfer", "payment.charge"}
 

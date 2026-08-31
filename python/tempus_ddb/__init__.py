@@ -28,7 +28,7 @@ except PackageNotFoundError:
     try:
         __version__ = version("tempus_ddb")
     except PackageNotFoundError:
-        __version__ = "0.4.1"
+        __version__ = "0.4.2"
 
 from ._tempus_ddb import TempusDDB, TempusExecutor, gen_keys
 from .github_executor import GitHubExecutorAdapter, UnknownExecutionError

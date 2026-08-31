@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "tempus-ddb"
-version = "0.4.1"
+version = "0.4.2"
 description = "Local-first B2A security gate with tamper-evident execution receipts"
 readme = "README.md"
 license = {text = "MIT"}
