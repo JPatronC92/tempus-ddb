@@ -236,6 +236,16 @@ pub(crate) fn install_policy(
         ],
     )
     .map_err(|e| format!("Failed to install policy: {e}"))?;
+
+    crate::events::record_event(
+        conn,
+        &tenant_id,
+        "policy.published",
+        &policy_digest,
+        &bundle_json,
+        issued_at,
+    )?;
+
     Ok(bundle)
 }
 

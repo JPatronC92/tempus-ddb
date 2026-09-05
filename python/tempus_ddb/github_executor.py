@@ -5,11 +5,16 @@ import json
 import os
 import re
 import sys
-from typing import Any, Dict, Optional, Protocol, Tuple
+from typing import Any, Dict, Optional, Protocol, Set, Tuple
 from urllib import error, parse, request
 
 from . import __version__
-from ._tempus_ddb import TempusExecutor
+from .executor_runtime import (
+    AmbiguousTransportError,
+    ExecutionResult,
+    ExecutorRuntime,
+    UnknownExecutionError,
+)
 
 RESOURCE_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
@@ -40,14 +45,6 @@ class GitHubAPIError(GitHubExecutorError):
     def __init__(self, status_code: int, message: str):
         super().__init__(message)
         self.status_code = status_code
-
-
-class UnknownExecutionError(GitHubExecutorError):
-    """The external effect may have happened and must not be retried automatically."""
-
-    def __init__(self, observation: str):
-        super().__init__("GitHub execution outcome is UNKNOWN")
-        self.observation = observation
 
 
 class GitHubTransport(Protocol):
@@ -87,7 +84,9 @@ class UrllibGitHubTransport:
                 body = response.read().decode("utf-8")
                 parsed = json.loads(body) if body else {}
                 if not isinstance(parsed, dict):
-                    raise GitHubExecutorError("GitHub returned a non-object JSON response")
+                    raise GitHubExecutorError(
+                        "GitHub returned a non-object JSON response"
+                    )
                 return parsed
         except error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
@@ -99,53 +98,45 @@ class UrllibGitHubTransport:
             raise GitHubAPIError(exc.code, message) from exc
 
 
-class GitHubExecutorAdapter:
-    """Execute a narrow set of GitHub writes from a verified Tempus permit."""
+class GitHubActionAdapter:
+    """ActionAdapter implementation for GitHub REST API writes."""
+
+    unsupported_error_code = "TEMPUS_GITHUB_BINDING_REJECTED"
+
+    SUPPORTED_ACTIONS: Set[str] = {
+        "github.create_issue",
+        "github.create_pull_request",
+    }
 
     def __init__(
         self,
-        executor_db: str,
-        executor_keyfile: str,
-        trusted_gate_id: str,
-        trusted_tenant_id: str,
-        token: Optional[str] = None,
+        token: str,
         api_url: str = "https://api.github.com",
         transport: Optional[GitHubTransport] = None,
-        executor_pool_size: int = 8,
     ):
-        self._executor = TempusExecutor(
-            executor_db,
-            executor_keyfile,
-            trusted_gate_id,
-            trusted_tenant_id,
-            executor_pool_size,
-        )
-        self._token = token or os.environ.get("GITHUB_TOKEN", "")
-        if not self._token:
-            raise GitHubExecutorError("GITHUB_TOKEN is required by the executor process")
+        if not token:
+            raise GitHubExecutorError(
+                "GITHUB_TOKEN is required by the executor process"
+            )
+        self._token = token
         self._api_url = _validate_github_api_url(api_url)
         self._transport = transport or UrllibGitHubTransport()
 
-    def execute(self, permit_json: str) -> str:
-        """Consume a permit, perform exactly its GitHub action, and sign the outcome."""
-        authorization = json.loads(self._executor.verify_and_consume_permit(permit_json))
-        authorization_id = authorization["authorization_id"]
-        action_id = authorization["action_id"]
-        permit = json.loads(permit_json)
+    @property
+    def supported_actions(self) -> Set[str]:
+        return self.SUPPORTED_ACTIONS
 
+    def execute_action(self, intent: Dict[str, Any]) -> ExecutionResult:
+        """Validate intent shape, bind request, invoke GitHub REST API and sanitize result."""
         try:
-            method, url, payload, action_type, resource = self._bind_request(permit["intent"])
+            method, url, payload, action_type, resource = self._bind_request(intent)
         except (KeyError, TypeError, ValueError, GitHubExecutorError) as exc:
-            return self._executor.complete_execution(
-                authorization_id,
-                action_id,
-                "FAILED",
-                json.dumps(
-                    {
-                        "error_code": "TEMPUS_GITHUB_BINDING_REJECTED",
-                        "message": str(exc),
-                    }
-                ),
+            return ExecutionResult(
+                status="FAILED",
+                payload={
+                    "error_code": "TEMPUS_GITHUB_BINDING_REJECTED",
+                    "message": str(exc),
+                },
             )
 
         headers = {
@@ -155,48 +146,27 @@ class GitHubExecutorAdapter:
             "User-Agent": f"tempus-ddb-github-executor/{__version__}",
             "X-GitHub-Api-Version": "2022-11-28",
         }
+
         try:
             response = self._transport.request(method, url, headers, payload)
+            result = self._sanitize_result(response, action_type, resource)
+            return ExecutionResult(status="SUCCEEDED", payload=result)
         except GitHubAPIError as exc:
             if exc.status_code >= 500:
-                observation = self._executor.mark_unknown(
-                    authorization_id,
-                    "GITHUB_SERVER_RESPONSE_" + str(exc.status_code),
-                )
-                raise UnknownExecutionError(observation) from exc
-            return self._executor.complete_execution(
-                authorization_id,
-                action_id,
-                "FAILED",
-                json.dumps(
-                    {
-                        "error_code": "GITHUB_HTTP_" + str(exc.status_code),
-                        "message": str(exc),
-                    }
-                ),
+                raise AmbiguousTransportError(
+                    f"GITHUB_SERVER_RESPONSE_{exc.status_code}"
+                ) from exc
+            return ExecutionResult(
+                status="FAILED",
+                payload={
+                    "error_code": "GITHUB_HTTP_" + str(exc.status_code),
+                    "message": str(exc),
+                },
             )
         except Exception as exc:
-            observation = self._executor.mark_unknown(
-                authorization_id,
-                "GITHUB_TRANSPORT_AMBIGUOUS: " + type(exc).__name__,
-            )
-            raise UnknownExecutionError(observation) from exc
-
-        result = self._sanitize_result(response, action_type, resource)
-        return self._executor.complete_execution(
-            authorization_id,
-            action_id,
-            "SUCCEEDED",
-            json.dumps(result),
-        )
-
-    def recover_incomplete(self, older_than_seconds: int = 0) -> str:
-        """Mark stale STARTED executions UNKNOWN without replaying GitHub writes."""
-        return self._executor.recover_incomplete(older_than_seconds)
-
-    def get_execution_state(self, authorization_id: str) -> str:
-        """Return the executor's signed local state for an authorization."""
-        return self._executor.get_execution_state(authorization_id)
+            raise AmbiguousTransportError(
+                f"GITHUB_TRANSPORT_AMBIGUOUS: {type(exc).__name__}"
+            ) from exc
 
     def _bind_request(
         self, intent: Dict[str, Any]
@@ -204,7 +174,9 @@ class GitHubExecutorAdapter:
         action_type = self._required_string(intent, "action_type")
         resource = self._required_string(intent, "resource")
         if not RESOURCE_PATTERN.fullmatch(resource):
-            raise GitHubExecutorError("resource must be an exact 'owner/repository' value")
+            raise GitHubExecutorError(
+                "resource must be an exact 'owner/repository' value"
+            )
         action_input = intent.get("input")
         if not isinstance(action_input, dict):
             raise GitHubExecutorError("intent.input must be an object")
@@ -236,7 +208,9 @@ class GitHubExecutorAdapter:
             payload["body"] = value["body"]
         if "labels" in value:
             labels = value["labels"]
-            if not isinstance(labels, list) or not all(isinstance(label, str) for label in labels):
+            if not isinstance(labels, list) or not all(
+                isinstance(label, str) for label in labels
+            ):
                 raise GitHubExecutorError("input.labels must be an array of strings")
             payload["labels"] = labels
         return payload
@@ -276,6 +250,47 @@ class GitHubExecutorAdapter:
         return result
 
 
+class GitHubExecutorAdapter:
+    """Execute a narrow set of GitHub writes from a verified Tempus permit."""
+
+    def __init__(
+        self,
+        executor_db: str,
+        executor_keyfile: str,
+        trusted_gate_id: str,
+        trusted_tenant_id: str,
+        token: Optional[str] = None,
+        api_url: str = "https://api.github.com",
+        transport: Optional[GitHubTransport] = None,
+        executor_pool_size: int = 8,
+    ):
+        token = token or os.environ.get("GITHUB_TOKEN", "")
+        self._adapter = GitHubActionAdapter(
+            token=token, api_url=api_url, transport=transport
+        )
+        self._runtime = ExecutorRuntime(
+            executor_db=executor_db,
+            executor_keyfile=executor_keyfile,
+            trusted_gate_id=trusted_gate_id,
+            trusted_tenant_id=trusted_tenant_id,
+            executor_pool_size=executor_pool_size,
+        )
+
+    def execute(self, permit_json: str) -> str:
+        """Consume a permit, perform exactly its GitHub action, and sign the outcome."""
+        return self._runtime.execute_permit(permit_json, self._adapter)
+
+    execute_permit = execute
+
+    def recover_incomplete(self, older_than_seconds: int = 0) -> str:
+        """Mark stale STARTED executions UNKNOWN without replaying GitHub writes."""
+        return self._runtime.raw_executor.recover_incomplete(older_than_seconds)
+
+    def get_execution_state(self, authorization_id: str) -> str:
+        """Return the executor's signed local state for an authorization."""
+        return self._runtime.raw_executor.get_execution_state(authorization_id)
+
+
 def _read_permit(path: str) -> str:
     if path == "-":
         return sys.stdin.read()
@@ -288,7 +303,9 @@ def main() -> None:
         prog="tempus-github-executor",
         description="Execute a GitHub write bound to a signed Tempus permit",
     )
-    parser.add_argument("--permit", required=True, help="Permit JSON file, or '-' for stdin")
+    parser.add_argument(
+        "--permit", required=True, help="Permit JSON file, or '-' for stdin"
+    )
     parser.add_argument("--executor-db", required=True)
     parser.add_argument("--executor-keyfile", required=True)
     parser.add_argument("--gate-id", required=True)

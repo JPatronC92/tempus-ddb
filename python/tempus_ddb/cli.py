@@ -1,5 +1,4 @@
 import argparse
-import importlib.metadata
 import json
 import os
 import shutil
@@ -7,13 +6,9 @@ import stat
 import sys
 import time
 
+from . import __version__
 from ._tempus_ddb import TempusDDB, gen_keys
 from .mcp_server import main_sync
-
-try:
-    __version__ = importlib.metadata.version("tempus_ddb")
-except importlib.metadata.PackageNotFoundError:
-    __version__ = "unknown"
 
 # --- Default paths (used when global args are not provided) ---
 DEFAULT_KEYFILE = "keys.json"
@@ -35,7 +30,9 @@ def _load_json_argument(value, label):
     try:
         parsed = json.loads(value)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"--{label} must be valid JSON or a path to a JSON file: {exc}") from exc
+        raise ValueError(
+            f"--{label} must be valid JSON or a path to a JSON file: {exc}"
+        ) from exc
     if not isinstance(parsed, dict):
         raise ValueError(f"--{label} must contain a JSON object")
     return json.dumps(parsed, separators=(",", ":"), sort_keys=True)
@@ -80,16 +77,23 @@ def run_init(args):
 def run_keygen(args):
     """Generate a workload keypair for an agent, executor, or gate."""
     if os.path.exists(args.output):
-        print(f"✗ Refusing to overwrite existing key file: {args.output}", file=sys.stderr)
+        print(
+            f"✗ Refusing to overwrite existing key file: {args.output}", file=sys.stderr
+        )
         sys.exit(1)
     try:
         result = json.loads(gen_keys(args.output))
         result.pop("private_key", None)
-        print(json.dumps({
-            "schema_version": "tempus.identity-key.v1",
-            "keyfile": args.output,
-            "public_key": result["public_key"],
-        }, indent=2))
+        print(
+            json.dumps(
+                {
+                    "schema_version": "tempus.identity-key.v1",
+                    "keyfile": args.output,
+                    "public_key": result["public_key"],
+                },
+                indent=2,
+            )
+        )
     except Exception as exc:
         print(f"✗ Key generation failed: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -143,7 +147,9 @@ def run_status(args):
             print(f"✓ Database: {db_path}")
 
         try:
-            db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE)
+            db = TempusDDB(
+                db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE
+            )
             validation = db.validate()
             val_str = str(validation).lower()
 
@@ -167,7 +173,9 @@ def run_status(args):
                 else:
                     data = validation
                 if isinstance(data, dict):
-                    last_hash = data.get("latest_hash") or data.get("result", {}).get("latest_hash")
+                    last_hash = data.get("latest_hash") or data.get("result", {}).get(
+                        "latest_hash"
+                    )
                     if last_hash:
                         print(f"  Latest hash: {last_hash}")
             except Exception as exc:
@@ -182,6 +190,7 @@ def run_status(args):
     print("  tempus init     # to initialize")
     print("  tempus request-action  # obtain a signed execution permit")
 
+
 def run_record(args):
     """Direct CLI recording (task D improvement)."""
     db_path, keyfile = _resolve_paths(args)
@@ -192,7 +201,10 @@ def run_record(args):
 
     if not os.path.exists(db_path) and not args.genesis:
         # For non-genesis, db should exist
-        print("✗ Database not found. You must create the first (genesis) record first.", file=sys.stderr)
+        print(
+            "✗ Database not found. You must create the first (genesis) record first.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     try:
@@ -204,7 +216,9 @@ def run_record(args):
         try:
             json.loads(payload)
         except json.JSONDecodeError:
-            print("✗ --payload must be valid JSON (or path to JSON file)", file=sys.stderr)
+            print(
+                "✗ --payload must be valid JSON (or path to JSON file)", file=sys.stderr
+            )
             sys.exit(1)
 
         # Load rules
@@ -215,7 +229,9 @@ def run_record(args):
         try:
             json.loads(rules)
         except json.JSONDecodeError:
-            print("✗ --rules must be valid JSON (or path to JSON file)", file=sys.stderr)
+            print(
+                "✗ --rules must be valid JSON (or path to JSON file)", file=sys.stderr
+            )
             sys.exit(1)
 
         db = TempusDDB(db_path, keyfile)
@@ -228,7 +244,10 @@ def run_record(args):
         err_msg = str(e)
         if "genesis" in err_msg.lower() or "empty" in err_msg.lower():
             print(f"✗ Chaining error: {err_msg}", file=sys.stderr)
-            print("  Tip: Use --genesis only for the first record. Later records auto-link to the latest record.", file=sys.stderr)
+            print(
+                "  Tip: Use --genesis only for the first record. Later records auto-link to the latest record.",
+                file=sys.stderr,
+            )
         else:
             print(f"✗ Record failed: {err_msg}", file=sys.stderr)
         sys.exit(1)
@@ -300,21 +319,21 @@ def run_register_agent(args):
 
     try:
         # If no --public-key provided, extract from keyfile
-        public_key = getattr(args, 'public_key', None)
+        public_key = getattr(args, "public_key", None)
         if not public_key:
-            agent_keyfile = getattr(args, 'agent_keyfile', None) or keyfile
+            agent_keyfile = getattr(args, "agent_keyfile", None) or keyfile
             if not os.path.exists(agent_keyfile):
                 print(f"✗ Key file not found: {agent_keyfile}", file=sys.stderr)
                 sys.exit(1)
-            with open(agent_keyfile, encoding='utf-8') as f:
+            with open(agent_keyfile, encoding="utf-8") as f:
                 key_data = json.load(f)
-            public_key = key_data.get('public_key')
+            public_key = key_data.get("public_key")
             if not public_key:
                 print("✗ Key file does not contain 'public_key'.", file=sys.stderr)
                 sys.exit(1)
 
         db = TempusDDB(db_path, keyfile if os.path.exists(keyfile) else DEFAULT_KEYFILE)
-        metadata = getattr(args, 'metadata', '{}') or '{}'
+        metadata = getattr(args, "metadata", "{}") or "{}"
         result = db.register_agent(public_key, args.alias, metadata)
         parsed = json.loads(result)
         print(f"✓ Agent '{args.alias}' registered.")
@@ -350,7 +369,10 @@ def run_whoami(args):
     db_path, keyfile = _resolve_paths(args)
 
     if not os.path.exists(keyfile):
-        print(f"✗ Key file not found: {keyfile}. Run 'tempus init' first.", file=sys.stderr)
+        print(
+            f"✗ Key file not found: {keyfile}. Run 'tempus init' first.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     try:
@@ -358,7 +380,7 @@ def run_whoami(args):
         result = db.whoami()
         parsed = json.loads(result)
         print(f"Public Key: {parsed.get('public_key')}")
-        alias = parsed.get('alias', '')
+        alias = parsed.get("alias", "")
         if alias:
             print(f"Alias:      {alias}")
         else:
@@ -404,13 +426,18 @@ def run_trace(args, *, verify=False):
     db_path, gate_keyfile = _resolve_paths(args)
     try:
         db = TempusDDB(db_path, gate_keyfile)
-        result = db.verify_trace(args.action_id) if verify else db.get_trace(args.action_id)
+        result = (
+            db.verify_trace(args.action_id) if verify else db.get_trace(args.action_id)
+        )
         parsed = json.loads(result)
         print(json.dumps(parsed, indent=2))
         if verify and parsed.get("status") == "INVALID":
             sys.exit(2)
     except Exception as exc:
-        print(f"✗ Trace {'verification' if verify else 'lookup'} failed: {exc}", file=sys.stderr)
+        print(
+            f"✗ Trace {'verification' if verify else 'lookup'} failed: {exc}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
@@ -500,6 +527,63 @@ def run_conformance(args):
         sys.exit(1)
 
 
+def run_checkpoint(args):
+    """Manage checkpoints and event stream export/verification."""
+    cmd = args.checkpoint_cmd
+    if cmd == "create":
+        try:
+            gate = _gate(args)
+            chk_str = gate.create_checkpoint(args.tenant_id)
+            if args.out:
+                with open(args.out, "w", encoding="utf-8") as f:
+                    f.write(chk_str)
+                print(f"✓ Checkpoint created → {args.out}")
+            else:
+                print(json.dumps(json.loads(chk_str), indent=2))
+        except Exception as exc:
+            print(f"✗ Checkpoint creation failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+    elif cmd == "export":
+        try:
+            gate = _gate(args)
+            stream_str = gate.export_event_stream(
+                args.tenant_id, args.from_seq, args.limit
+            )
+            if args.out:
+                with open(args.out, "w", encoding="utf-8") as f:
+                    f.write(stream_str)
+                print(f"✓ Event stream exported → {args.out}")
+            else:
+                print(json.dumps(json.loads(stream_str), indent=2))
+        except Exception as exc:
+            print(f"✗ Event stream export failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+    elif cmd == "verify":
+        try:
+            chk_raw = args.checkpoint
+            if os.path.isfile(chk_raw):
+                with open(chk_raw, "r", encoding="utf-8") as f:
+                    chk_raw = f.read().strip()
+
+            stream_raw = args.stream
+            if os.path.isfile(stream_raw):
+                with open(stream_raw, "r", encoding="utf-8") as f:
+                    stream_raw = f.read().strip()
+
+            gate = _gate(args)
+            res_str = gate.verify_checkpoint_stream(chk_raw, stream_raw)
+            result = json.loads(res_str)
+            print(json.dumps(result, indent=2))
+            if result.get("status") != "VERIFIED":
+                sys.exit(2)
+        except Exception as exc:
+            print(f"✗ Checkpoint verification failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        print("Invalid checkpoint subcommand", file=sys.stderr)
+        sys.exit(1)
+
+
 def run_doctor(args):
     """Check whether the local gate is ready without exposing credential material."""
     db_path, keyfile = _resolve_paths(args)
@@ -565,7 +649,9 @@ def run_doctor(args):
         add(
             "github_executor_credentials",
             "PASS" if os.environ.get("GITHUB_TOKEN") else "FAIL",
-            "GITHUB_TOKEN is set" if os.environ.get("GITHUB_TOKEN") else "GITHUB_TOKEN is missing",
+            "GITHUB_TOKEN is set"
+            if os.environ.get("GITHUB_TOKEN")
+            else "GITHUB_TOKEN is missing",
         )
 
     overall = "FAIL" if any(check["status"] == "FAIL" for check in checks) else "PASS"
@@ -584,26 +670,27 @@ def run_doctor(args):
     if overall != "PASS":
         sys.exit(1)
 
+
 def run_version():
     print(f"tempus {__version__}")
+
 
 def main():
     parser = argparse.ArgumentParser(
         prog="tempus",
-        description="Tempus DDB — The B2A security gate for autonomous agent actions"
+        description="Tempus DDB — The B2A security gate for autonomous agent actions",
     )
-    parser.add_argument(
-        "--version", action="store_true",
-        help="Show version and exit"
-    )
+    parser.add_argument("--version", action="store_true", help="Show version and exit")
     # Global arguments available to all subcommands
     parser.add_argument(
-        "--db", default=DEFAULT_DB,
-        help=f"Path to the ledger database (default: {DEFAULT_DB})"
+        "--db",
+        default=DEFAULT_DB,
+        help=f"Path to the ledger database (default: {DEFAULT_DB})",
     )
     parser.add_argument(
-        "--keyfile", default=DEFAULT_KEYFILE,
-        help=f"Path to the Ed25519 key file (default: {DEFAULT_KEYFILE})"
+        "--keyfile",
+        default=DEFAULT_KEYFILE,
+        help=f"Path to the Ed25519 key file (default: {DEFAULT_KEYFILE})",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=False)
@@ -611,7 +698,9 @@ def main():
     # init
     subparsers.add_parser("init", help="Initialize keys and database")
 
-    keygen_p = subparsers.add_parser("keygen", help="Generate a workload Ed25519 keypair")
+    keygen_p = subparsers.add_parser(
+        "keygen", help="Generate a workload Ed25519 keypair"
+    )
     keygen_p.add_argument("--output", required=True, help="New key file path")
 
     # mcp
@@ -626,10 +715,24 @@ def main():
     subparsers.add_parser("status", help="Show current ledger and keys status")
 
     # record (new/improved for CLI users)
-    record_p = subparsers.add_parser("record", help="Record a decision directly from CLI")
-    record_p.add_argument("--payload", required=True, help="JSON string or path to JSON file with the decision")
-    record_p.add_argument("--rules", required=True, help="JSON string or path to JSON file with the rules applied")
-    record_p.add_argument("--genesis", action="store_true", help="Mark this as the first decision in the chain")
+    record_p = subparsers.add_parser(
+        "record", help="Record a decision directly from CLI"
+    )
+    record_p.add_argument(
+        "--payload",
+        required=True,
+        help="JSON string or path to JSON file with the decision",
+    )
+    record_p.add_argument(
+        "--rules",
+        required=True,
+        help="JSON string or path to JSON file with the rules applied",
+    )
+    record_p.add_argument(
+        "--genesis",
+        action="store_true",
+        help="Mark this as the first decision in the chain",
+    )
     # Note: Parent chaining for audit should be included inside the JSON payload.
     # The core ledger is append-only controlled by the `genesis` flag.
 
@@ -638,18 +741,43 @@ def main():
 
     # list
     list_p = subparsers.add_parser("list", help="List decisions with pagination")
-    list_p.add_argument("--limit", type=int, default=10, help="Maximum number of records to return (default: 10)")
-    list_p.add_argument("--offset", type=int, default=0, help="Number of records to skip (default: 0)")
+    list_p.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Maximum number of records to return (default: 10)",
+    )
+    list_p.add_argument(
+        "--offset", type=int, default=0, help="Number of records to skip (default: 0)"
+    )
 
     # count
-    subparsers.add_parser("count", help="Count the total number of decisions in the ledger")
+    subparsers.add_parser(
+        "count", help="Count the total number of decisions in the ledger"
+    )
 
     # register-agent
-    reg_agent_p = subparsers.add_parser("register-agent", help="Register an agent identity in the ledger")
-    reg_agent_p.add_argument("--alias", required=True, help="Human-readable alias for the agent")
-    reg_agent_p.add_argument("--public-key", dest="public_key", default=None, help="Ed25519 public key (hex). If omitted, extracted from --agent-keyfile or --keyfile")
-    reg_agent_p.add_argument("--agent-keyfile", dest="agent_keyfile", default=None, help="Path to the agent's key file (used to extract public key)")
-    reg_agent_p.add_argument("--metadata", default="{}", help="JSON metadata for the agent")
+    reg_agent_p = subparsers.add_parser(
+        "register-agent", help="Register an agent identity in the ledger"
+    )
+    reg_agent_p.add_argument(
+        "--alias", required=True, help="Human-readable alias for the agent"
+    )
+    reg_agent_p.add_argument(
+        "--public-key",
+        dest="public_key",
+        default=None,
+        help="Ed25519 public key (hex). If omitted, extracted from --agent-keyfile or --keyfile",
+    )
+    reg_agent_p.add_argument(
+        "--agent-keyfile",
+        dest="agent_keyfile",
+        default=None,
+        help="Path to the agent's key file (used to extract public key)",
+    )
+    reg_agent_p.add_argument(
+        "--metadata", default="{}", help="JSON metadata for the agent"
+    )
 
     # list-agents
     subparsers.add_parser("list-agents", help="List all registered agents")
@@ -661,24 +789,38 @@ def main():
         "install-policy", help="Sign and activate a deterministic policy bundle"
     )
     install_policy_p.add_argument("--policy", required=True, help="Policy JSON or file")
-    subparsers.add_parser("list-policies", help="List active and retired signed policies")
+    subparsers.add_parser(
+        "list-policies", help="List active and retired signed policies"
+    )
 
-    rotate_p = subparsers.add_parser("rotate-agent", help="Rotate an active identity key")
+    rotate_p = subparsers.add_parser(
+        "rotate-agent", help="Rotate an active identity key"
+    )
     rotate_p.add_argument("--current-public-key", required=True)
     rotate_p.add_argument("--new-keyfile", required=True)
-    revoke_p = subparsers.add_parser("revoke-agent", help="Revoke an identity key and open permits")
+    revoke_p = subparsers.add_parser(
+        "revoke-agent", help="Revoke an identity key and open permits"
+    )
     revoke_p.add_argument("--public-key", required=True)
     revoke_p.add_argument("--reason", required=True)
-    subparsers.add_parser("identity-events", help="List signed rotation and revocation events")
+    subparsers.add_parser(
+        "identity-events", help="List signed rotation and revocation events"
+    )
 
     conformance_p = subparsers.add_parser(
         "conformance", help="Emit machine-readable adapter conformance requirements"
     )
     conformance_p.add_argument(
-        "--signer", action="store_true", help="Also exercise the configured signing provider"
+        "--signer",
+        action="store_true",
+        help="Also exercise the configured signing provider",
     )
-    doctor_p = subparsers.add_parser("doctor", help="Check production configuration readiness")
-    doctor_p.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    doctor_p = subparsers.add_parser(
+        "doctor", help="Check production configuration readiness"
+    )
+    doctor_p.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON"
+    )
     doctor_p.add_argument(
         "--github", action="store_true", help="Also check GitHub executor credentials"
     )
@@ -688,22 +830,76 @@ def main():
         "request-action",
         help="Request a signed, single-use authorization before executing an action",
     )
-    request_p.add_argument("--intent", required=True, help="tempus.action-intent.v1 JSON or file")
-    request_p.add_argument("--agent-keyfile", required=True, help="Requesting agent Ed25519 key file")
-    request_p.add_argument("--ttl-seconds", type=int, default=60, help="Permit lifetime (1-86400 seconds)")
+    request_p.add_argument(
+        "--intent", required=True, help="tempus.action-intent.v1 JSON or file"
+    )
+    request_p.add_argument(
+        "--agent-keyfile", required=True, help="Requesting agent Ed25519 key file"
+    )
+    request_p.add_argument(
+        "--ttl-seconds", type=int, default=60, help="Permit lifetime (1-86400 seconds)"
+    )
 
     outcome_p = subparsers.add_parser(
         "commit-outcome",
         help="Consume an allowed permit and append the signed executor outcome",
     )
     outcome_p.add_argument("--authorization-id", required=True)
-    outcome_p.add_argument("--outcome", required=True, help="tempus.action-outcome.v1 JSON or file")
-    outcome_p.add_argument("--executor-keyfile", required=True, help="Executor Ed25519 key file")
+    outcome_p.add_argument(
+        "--outcome", required=True, help="tempus.action-outcome.v1 JSON or file"
+    )
+    outcome_p.add_argument(
+        "--executor-keyfile", required=True, help="Executor Ed25519 key file"
+    )
 
-    trace_p = subparsers.add_parser("trace", help="Read an action authorization and outcome")
+    trace_p = subparsers.add_parser(
+        "trace", help="Read an action authorization and outcome"
+    )
     trace_p.add_argument("--action-id", required=True)
-    verify_trace_p = subparsers.add_parser("verify-trace", help="Verify an action trace end to end")
+    verify_trace_p = subparsers.add_parser(
+        "verify-trace", help="Verify an action trace end to end"
+    )
     verify_trace_p.add_argument("--action-id", required=True)
+
+    # checkpoint subcommands
+    chk_parser = subparsers.add_parser(
+        "checkpoint", help="Cryptographic checkpoint and event stream operations"
+    )
+    chk_sub = chk_parser.add_subparsers(dest="checkpoint_cmd", required=True)
+
+    # checkpoint create
+    chk_create = chk_sub.add_parser(
+        "create", help="Generate and sign a new monotonic checkpoint for a tenant"
+    )
+    chk_create.add_argument("--tenant-id", default="*", help="Tenant ID (default: *)")
+    chk_create.add_argument("--out", help="Output file path to save checkpoint JSON")
+
+    # checkpoint export
+    chk_export = chk_sub.add_parser(
+        "export", help="Export event stream events for a tenant"
+    )
+    chk_export.add_argument("--tenant-id", default="*", help="Tenant ID (default: *)")
+    chk_export.add_argument(
+        "--from-seq", type=int, default=1, help="Starting sequence number (default: 1)"
+    )
+    chk_export.add_argument(
+        "--limit",
+        type=int,
+        default=1000,
+        help="Maximum events to export (default: 1000)",
+    )
+    chk_export.add_argument("--out", help="Output file path to save stream JSON")
+
+    # checkpoint verify
+    chk_verify = chk_sub.add_parser(
+        "verify", help="Cryptographically verify an event stream against a checkpoint"
+    )
+    chk_verify.add_argument(
+        "--checkpoint", required=True, help="Checkpoint JSON string or file path"
+    )
+    chk_verify.add_argument(
+        "--stream", required=True, help="Event stream JSON array string or file path"
+    )
 
     args = parser.parse_args()
 
@@ -758,6 +954,8 @@ def main():
             run_trace(args)
         elif args.command == "verify-trace":
             run_trace(args, verify=True)
+        elif args.command == "checkpoint":
+            run_checkpoint(args)
         elif args.command is None:
             parser.print_help()
         else:
@@ -769,6 +967,7 @@ def main():
         # Last resort - should not reach here for handled cases
         print(f"Unexpected error: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

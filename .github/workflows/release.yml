@@ -112,6 +112,13 @@ jobs:
           file: sbom/tempus-ddb-${{ github.event.release.tag_name }}.spdx.json
           tag: ${{ github.event.release.tag_name }}
           overwrite: true
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          echo "version=$(grep -oP '(?<=version = ").*?(?=")' Cargo.toml)" >> $GITHUB_OUTPUT
+      - name: Publish to crates.io
+        if: steps.version.outputs.version == github.event.release.tag_name[1:]
+        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
 
       # Publish to PyPI using Trusted Publishing (OIDC) or PYPI_API_TOKEN secret
       - name: Publish to PyPI

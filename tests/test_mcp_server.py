@@ -79,16 +79,18 @@ async def test_mcp_b2a_workflow(sandbox, monkeypatch):
         )
         assert json.loads(response[0].text)["status"] == "success"
 
-    intent = json.dumps({
-        "schema_version": "tempus.action-intent.v1",
-        "tenant_id": "mcp-test",
-        "agent_id": agent_id,
-        "idempotency_key": "mcp-action-001",
-        "action_type": "deploy",
-        "resource": "service/api",
-        "requested_at": time.time_ns() // 1_000,
-        "input": {"version": "1.2.3"},
-    })
+    intent = json.dumps(
+        {
+            "schema_version": "tempus.action-intent.v1",
+            "tenant_id": "mcp-test",
+            "agent_id": agent_id,
+            "idempotency_key": "mcp-action-001",
+            "action_type": "deploy",
+            "resource": "service/api",
+            "requested_at": time.time_ns() // 1_000,
+            "input": {"version": "1.2.3"},
+        }
+    )
     response = await call_tool(
         "tempus_request_action",
         {
@@ -102,15 +104,17 @@ async def test_mcp_b2a_workflow(sandbox, monkeypatch):
     authorization_id = authorization["authorization"]["authorization_id"]
     action_id = authorization["authorization"]["action_id"]
 
-    blocked_intent = json.dumps({
-        "schema_version": "tempus.action-intent.v1",
-        "tenant_id": "mcp-test",
-        "agent_id": agent_id,
-        "idempotency_key": "mcp-action-invalid-signature",
-        "action_type": "deploy",
-        "resource": "service/api",
-        "requested_at": time.time_ns() // 1_000,
-    })
+    blocked_intent = json.dumps(
+        {
+            "schema_version": "tempus.action-intent.v1",
+            "tenant_id": "mcp-test",
+            "agent_id": agent_id,
+            "idempotency_key": "mcp-action-invalid-signature",
+            "action_type": "deploy",
+            "resource": "service/api",
+            "requested_at": time.time_ns() // 1_000,
+        }
+    )
     response = await call_tool(
         "tempus_request_action_signed",
         {

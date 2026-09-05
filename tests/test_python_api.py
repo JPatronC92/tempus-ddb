@@ -114,7 +114,9 @@ def test_validate_detects_tampering(tmp_path):
     # Tamper with a persisted decision while leaving the signature unchanged.
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute("UPDATE decisions SET payload = ?", (json.dumps({"original": False}),))
+        conn.execute(
+            "UPDATE decisions SET payload = ?", (json.dumps({"original": False}),)
+        )
         conn.commit()
     finally:
         conn.close()
@@ -137,7 +139,7 @@ def test_record_accepts_both_string_and_dict_like(tmp_path):
     result = db.record(
         json.dumps({"action": "string_payload"}),
         json.dumps({"rule": "string"}),
-        genesis=True
+        genesis=True,
     )
     assert result is not None
 
@@ -181,14 +183,14 @@ def test_record_chaining_via_payload(tmp_path):
     gen_keys(str(keyfile))
     db = TempusDDB(str(db_path), str(keyfile))
 
-    h1 = json.loads(db.record(json.dumps({"step":1}), json.dumps({}), genesis=True))
+    h1 = json.loads(db.record(json.dumps({"step": 1}), json.dumps({}), genesis=True))
     parent = h1.get("latest_hash") or h1.get("output", {}).get("latest_hash")
 
-    h2 = json.loads(db.record(
-        json.dumps({"step":2, "parent": parent}),
-        json.dumps({}),
-        genesis=False
-    ))
+    h2 = json.loads(
+        db.record(
+            json.dumps({"step": 2, "parent": parent}), json.dumps({}), genesis=False
+        )
+    )
     assert h2 is not None
 
     val = db.validate()
@@ -211,28 +213,34 @@ def test_b2a_python_api_round_trip(tmp_path):
     db.register_agent(agent_id, "agent", "{}")
     db.register_agent(executor_id, "executor", "{}")
 
-    intent = json.dumps({
-        "schema_version": "tempus.action-intent.v1",
-        "tenant_id": "python-test",
-        "agent_id": agent_id,
-        "idempotency_key": "python-action-001",
-        "action_type": "write_file",
-        "resource": "workspace/report.json",
-        "requested_at": time.time_ns() // 1_000,
-        "input": {"digest": "abc123"},
-    })
+    intent = json.dumps(
+        {
+            "schema_version": "tempus.action-intent.v1",
+            "tenant_id": "python-test",
+            "agent_id": agent_id,
+            "idempotency_key": "python-action-001",
+            "action_type": "write_file",
+            "resource": "workspace/report.json",
+            "requested_at": time.time_ns() // 1_000,
+            "input": {"digest": "abc123"},
+        }
+    )
     authorization = json.loads(db.request_action(intent, str(agent_keyfile), 60))
     assert authorization["authorization"]["decision"] == "ALLOWED"
     authorization_id = authorization["authorization"]["authorization_id"]
     action_id = authorization["authorization"]["action_id"]
-    outcome = json.dumps({
-        "schema_version": "tempus.action-outcome.v1",
-        "authorization_id": authorization_id,
-        "action_id": action_id,
-        "status": "SUCCEEDED",
-        "output": {"digest": "def456"},
-    })
-    receipt = json.loads(db.commit_outcome(authorization_id, outcome, str(executor_keyfile)))
+    outcome = json.dumps(
+        {
+            "schema_version": "tempus.action-outcome.v1",
+            "authorization_id": authorization_id,
+            "action_id": action_id,
+            "status": "SUCCEEDED",
+            "output": {"digest": "def456"},
+        }
+    )
+    receipt = json.loads(
+        db.commit_outcome(authorization_id, outcome, str(executor_keyfile))
+    )
     assert receipt["receipt"]["status"] == "SUCCEEDED"
     verification = json.loads(db.verify_trace(action_id))
     assert verification["status"] == "VERIFIED"

@@ -100,3 +100,9 @@ coverage.xml
 .DS_Store
 Thumbs.db
 Desktop.ini
+*.pdb
+*.pyd
+*.so
+*.dylib
+.scratch/
+tempus_demo/

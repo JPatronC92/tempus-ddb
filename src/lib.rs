@@ -14,6 +14,9 @@ mod b2a;
 #[cfg(not(target_arch = "wasm32"))]
 mod phase3;
 
+#[cfg(not(target_arch = "wasm32"))]
+mod events;
+
 // --- 1. PATRÓN STORAGE LAYER (TRAIT) ---
 pub trait StorageLayer {
     fn insert_decision(&mut self, payload: &str, rules: &str, genesis: bool) -> Result<(), String>;
@@ -630,6 +633,29 @@ impl SqliteStorage {
     pub fn signer_conformance(&self) -> Result<String, String> {
         phase3::signer_conformance(&self.load_signer()?)
     }
+
+    pub fn create_checkpoint(&self, tenant_id: &str) -> Result<String, String> {
+        let signer = self.load_signer()?;
+        let created_at = b2a::now_micros()?;
+        events::create_checkpoint(&self.conn, &signer, tenant_id, created_at)
+    }
+
+    pub fn export_event_stream(
+        &self,
+        tenant_id: &str,
+        from_sequence: u64,
+        limit: u32,
+    ) -> Result<String, String> {
+        events::export_event_stream(&self.conn, tenant_id, from_sequence, limit)
+    }
+
+    pub fn verify_checkpoint_stream(
+        &self,
+        checkpoint_json: &str,
+        stream_json: &str,
+    ) -> Result<String, String> {
+        events::verify_checkpoint_stream(checkpoint_json, stream_json, None)
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1168,6 +1194,36 @@ impl TempusDDB {
             "algorithm": identity.algorithm,
         }))
         .unwrap())
+    }
+
+    #[pyo3(signature = (tenant_id="*".to_string()))]
+    fn create_checkpoint(&self, tenant_id: String) -> PyResult<String> {
+        self.storage
+            .create_checkpoint(&tenant_id)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (tenant_id="*".to_string(), from_sequence=1, limit=1000))]
+    fn export_event_stream(
+        &self,
+        tenant_id: String,
+        from_sequence: u64,
+        limit: u32,
+    ) -> PyResult<String> {
+        self.storage
+            .export_event_stream(&tenant_id, from_sequence, limit)
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    #[pyo3(signature = (checkpoint_json, stream_json))]
+    fn verify_checkpoint_stream(
+        &self,
+        checkpoint_json: &str,
+        stream_json: &str,
+    ) -> PyResult<String> {
+        self.storage
+            .verify_checkpoint_stream(checkpoint_json, stream_json)
+            .map_err(PyRuntimeError::new_err)
     }
 }
 

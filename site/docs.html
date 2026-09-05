@@ -33,8 +33,8 @@
         <header class="page-hero">
           <p class="eyebrow">Documentation</p>
           <h1>Integration guide.</h1>
-          <p class="lede">Install v0.4.2, keep executor credentials outside the agent, and verify the resulting trace.</p>
-          <div class="button-row"><a class="button primary" href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.2">Release v0.4.2</a><a class="button" href="trace.html">Trace demo</a></div>
+          <p class="lede">Install v0.5.0, establish mediated executor boundaries, and verify action traces and checkpoints.</p>
+          <div class="button-row"><a class="button primary" href="https://github.com/elbuilder77/tempus-ddb">GitHub Repo</a><a class="button" href="trace.html">Trace demo</a></div>
         </header>
       </div>
 
@@ -50,7 +50,7 @@
               <code>git clone https://github.com/elbuilder77/tempus-ddb.git
 cd tempus-ddb
 python -m pip install -e ".[dev]"</code>
-              <p><a href="https://pypi.org/project/tempus-ddb/">View verified package on PyPI</a> · <a href="https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.2">Platform-specific wheels & SBOM are available as GitHub Release assets</a>.</p>
+              <p><a href="https://pypi.org/project/tempus-ddb/">View verified package on PyPI</a> · <a href="https://github.com/elbuilder77/tempus-ddb/releases">Platform-specific wheels & SBOM are available as GitHub Release assets</a>.</p>
             </article>
 
             <article class="doc-card" id="flow">
@@ -77,15 +77,18 @@ python -m pip install -e ".[dev]"</code>
                   <tr><td>Execution receipt</td><td><code>tempus.execution-receipt.v1</code></td></tr>
                   <tr><td>Complete trace</td><td><code>tempus.action-trace.v1</code></td></tr>
                   <tr><td>Verification result</td><td><code>tempus.trace-verification.v1</code></td></tr>
+                  <tr><td>Event stream item</td><td><code>tempus.event-stream-event.v1</code></td></tr>
+                  <tr><td>Signed checkpoint</td><td><code>tempus.checkpoint.v1</code></td></tr>
+                  <tr><td>Checkpoint verification</td><td><code>tempus.checkpoint-verification.v1</code></td></tr>
                 </tbody>
               </table>
-              <p>Read the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/COMPATIBILITY.md">compatibility policy</a> and <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/MIGRATION_0.4.md">v0.4 migration notes</a> before changing a deployed integration.</p>
+              <p>Read the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/COMPATIBILITY.md">compatibility policy</a> before changing a deployed integration.</p>
             </article>
 
             <article class="doc-card" id="integration">
               <p class="eyebrow">04 / Integration</p>
               <h2>Executor integration</h2>
-              <p>The generic executor and packaged GitHub adapter both verify permit binding, tenant, expiry and single consumption. The GitHub adapter supports only exact, allowlisted issue and pull-request actions; it keeps its token outside the agent payload.</p>
+              <p>The unified <code>ExecutorRuntime</code> and packaged adapters (GitHub, HTTP/Webhooks, Slack, and Pluggable Payments) verify permit binding, tenant, expiry and single consumption, keeping downstream credentials outside the agent's payload.</p>
               <code>tempus init
 tempus keygen --output agent.keys.json
 tempus keygen --output executor.keys.json
@@ -107,16 +110,31 @@ tempus identity-events</code>
               <p>The interactive <a href="trace.html">trace demo</a> verifies a synthetic browser fixture. It is not connected to a Tempus database, and it does not replace <code>tempus verify-trace</code> for a real action.</p>
             </article>
 
+            <article class="doc-card" id="checkpoints">
+              <p class="eyebrow">06 / Durability & DR</p>
+              <h2>Checkpoints & Disaster Recovery</h2>
+              <p>Generate signed external checkpoints and export hash-linked event streams without database downtime to detect rollbacks and whole-database tampering:</p>
+              <code># 1. Create a signed monotonic checkpoint for a tenant
+tempus checkpoint create --tenant-id acme --out checkpoint-acme.json
+
+# 2. Export incremental event stream
+tempus checkpoint export --tenant-id acme --from-seq 1 --out stream-acme.json
+
+# 3. Verify stream integrity and rollback absence offline
+tempus checkpoint verify --checkpoint checkpoint-acme.json --stream stream-acme.json</code>
+              <p>See <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/docs/BACKUP_AND_DISASTER_RECOVERY.md">docs/BACKUP_AND_DISASTER_RECOVERY.md</a> for full procedures.</p>
+            </article>
+
             <article class="doc-card" id="boundary">
-              <p class="eyebrow">06 / Security boundary</p>
+              <p class="eyebrow">07 / Security boundary</p>
               <h2>Current limits</h2>
-              <p>v0.4.2 is local-first and single-instance. It detects alteration of the supported evidence, but does not yet provide distributed permit consumption or independent durable checkpoints for whole-database rollback or deletion detection.</p>
+              <p>v0.5.0 features durable local operations with external checkpoints. Distributed multi-container gate deployment with OpenTelemetry metrics and tenant quotas is targeted for Milestone 0.6.</p>
               <p>Review the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/THREAT_MODEL.md">threat model</a> before high-impact use, report issues through the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/SECURITY.md">security policy</a>, and use the <a href="https://github.com/elbuilder77/tempus-ddb/blob/main/CONTRIBUTING.md">contribution guide</a> to participate.</p>
             </article>
           </div>
           <aside class="doc-aside" aria-label="On this page">
             <strong>On this page</strong>
-            <a href="#install">Install</a><a href="#flow">B2A flow</a><a href="#contracts">Contracts</a><a href="#integration">Integration</a><a href="#audit">Audit</a><a href="#boundary">Security boundary</a>
+            <a href="#install">Install</a><a href="#flow">B2A flow</a><a href="#contracts">Contracts</a><a href="#integration">Integration</a><a href="#audit">Audit</a><a href="#checkpoints">Checkpoints & DR</a><a href="#boundary">Security boundary</a>
           </aside>
         </div>
       </section>

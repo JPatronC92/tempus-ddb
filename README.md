@@ -32,9 +32,10 @@ pip install tempus-ddb
 ---
 </div>
 
-> **Status: beta (`0.4.2` source line).** Signed policy, identity lifecycle,
-> Vault-backed signing, and 4 credential-isolated executors are implemented.
-> Distributed permit consumption and independent external checkpoints are not.
+> **Status: beta (`0.5.0` milestone line).** Signed policy, identity lifecycle,
+> Vault-backed signing, mediated executor runtime (GitHub, HTTP, Slack, Payment),
+> hash-linked event streaming, and signed monotonic checkpoints are implemented.
+> Distributed multi-container gate service is in progress (0.6).
 >
 > [Project site](https://elbuilder77.github.io/tempus-ddb/) ·
 > [Integration guide](https://elbuilder77.github.io/tempus-ddb/docs.html) ·
@@ -96,15 +97,13 @@ Inspect how Tempus binds the entire lifecycle (Intent ➔ Authorization ➔ Exec
 
 ---
 
-The `0.4.2` source tree implements the local permit protocol, signed policy
-bundles, rotation and revocation, generic and specialized mediated executors (GitHub, HTTP/Webhooks, Slack, and Pluggable Payments), Vault Transit signing,
-and single-instance replay protection. It does **not** yet include
-distributed permit consumption, external checkpoints, or a web audit console. Read
+The `0.5.0` implementation establishes the local permit protocol, signed policy
+bundles, rotation and revocation, unified mediated `ExecutorRuntime` (GitHub, HTTP/Webhooks, Slack, and Pluggable Payments), Vault Transit signing, single-instance replay protection, and cryptographically signed monotonic checkpoints for verifiable disaster recovery. Read
 [THREAT_MODEL.md](THREAT_MODEL.md) before relying on the current security boundary.
 
 ## What is implemented
 
-- Stable machine contracts with explicit `schema_version` values.
+- Stable machine contracts with explicit `schema_version` values (`.v1`).
 - Separate Ed25519 identities for the Tempus gate, requesting agent, and executor.
 - Immutable, gate-signed agent registration receipts. Registrations cannot be silently
   overwritten.
@@ -120,15 +119,14 @@ distributed permit consumption, external checkpoints, or a web audit console. Re
   conflicting second outcome is rejected.
 - End-to-end verification of intent, gate authorization, executor outcome, and receipt
   linkage.
-- A generic `TempusExecutor` that verifies gate identity, tenant, expiry, permit
-  integrity, and single consumption before a demo adapter produces an effect.
+- A unified mediated `ExecutorRuntime` with conformance testing for third-party adapters.
 - Signed executor observations for `STARTED`, `SUCCEEDED`, `FAILED`, and `UNKNOWN`, with
   restart recovery that never retries an ambiguous external effect.
-- A packaged GitHub executor for `github.create_issue` and
-  `github.create_pull_request`; it binds the exact repository and allowlisted arguments
-  from the signed intent and keeps `GITHUB_TOKEN` outside the agent payload.
+- Pre-packaged reference executors for GitHub (`github.create_issue`, `github.create_pull_request`), HTTP/Webhooks, Slack, and Pluggable Payments.
 - Money is optional metadata in the same universal action envelope; financial and
   non-financial actions use the same protocol.
+- Append-only hash-linked event streams (`tempus.event-stream-event.v1`) and signed monotonic checkpoints (`tempus.checkpoint.v1`) for tamper and rollback detection.
+- Disaster recovery and offline reconciliation tooling (`tempus checkpoint create / export / verify`).
 - An autonomous MCP surface that hides administrative, legacy, and destructive tools by
   default.
 
@@ -205,7 +203,6 @@ Production deployments should use the non-secret Vault Transit configuration des
 in [docs/VAULT_TRANSIT_SIGNER.md](docs/VAULT_TRANSIT_SIGNER.md); the workload authenticates
 to Vault without placing a private key in the file.
 
-## Install a production policy
 ## Install a signed policy bundle
 
 Policies define allowed tenants, agents, actions, resources, rate ceilings, minor-unit
@@ -219,6 +216,23 @@ tempus list-policies
 Policy evaluation is deterministic and rejects unknown constraints, floating-point input,
 oversized input, tenant/resource/action mismatches, excessive TTL, disallowed executors,
 and money metadata outside the configured currency or minor-unit ceiling.
+
+## Checkpoints & Disaster Recovery
+
+Tempus allows generating cryptographically signed monotonic checkpoints and exporting hash-linked event streams without database downtime:
+
+```bash
+# 1. Create a signed monotonic checkpoint for a tenant
+tempus checkpoint create --tenant-id acme --out checkpoint-acme.json
+
+# 2. Export the incremental event stream
+tempus checkpoint export --tenant-id acme --from-seq 1 --out stream-acme.json
+
+# 3. Cryptographically verify stream integrity and rollback absence offline
+tempus checkpoint verify --checkpoint checkpoint-acme.json --stream stream-acme.json
+```
+
+See [docs/BACKUP_AND_DISASTER_RECOVERY.md](docs/BACKUP_AND_DISASTER_RECOVERY.md) for complete disaster recovery, hot backup, and reconciliation procedures.
 
 ## Python quickstart
 

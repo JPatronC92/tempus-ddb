@@ -58,7 +58,9 @@ def execution_environment(tmp_path):
     }
 
 
-def issue_permit(environment, idempotency_key, action_type, action_input, resource="acme/widget"):
+def issue_permit(
+    environment, idempotency_key, action_type, action_input, resource="acme/widget"
+):
     intent = json.dumps(
         {
             "schema_version": "tempus.action-intent.v1",

@@ -20,41 +20,42 @@ In single-instance SQLite deployments:
 
 ## 2. Stable Contracts for Durability
 
-### A. Append-Only Receipt Event (`tempus.receipt-event.v1`)
+### A. Append-Only Event Stream Event (`tempus.event-stream-event.v1`)
 
 ```json
 {
-  "schema_version": "tempus.receipt-event.v1",
-  "sequence_number": 1042,
+  "schema_version": "tempus.event-stream-event.v1",
   "tenant_id": "acme",
-  "action_id": "8f3b...12a",
-  "authorization_id": "4c2a...99b",
-  "receipt_id": "7e1d...55c",
-  "intent_hash": "a1b2...c3d",
-  "outcome_hash": "e5f6...789",
-  "gate_id": "ed25519-gate-public-key-hex",
-  "executor_id": "ed25519-executor-public-key-hex",
-  "prev_event_hash": "3d9a...110",
-  "event_hash": "fa08...44e",
-  "gate_signature": "signature-hex",
-  "emitted_at": 1787040012000000
+  "sequence_number": 1,
+  "event_id": "act_cli_chk_1",
+  "event_type": "ACTION_AUTHORIZED",
+  "payload_hash": "a1b2...c3d",
+  "prev_event_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "timestamp": 1787040012000000,
+  "event_digest": "fa08...44e"
 }
 ```
 
-### B. Signed Checkpoint Bundle (`tempus.checkpoint-bundle.v1`)
+### B. Signed Monotonic Checkpoint (`tempus.checkpoint.v1`)
 
 ```json
 {
-  "schema_version": "tempus.checkpoint-bundle.v1",
-  "checkpoint_id": "chk-2026-08-30-001",
+  "schema_version": "tempus.checkpoint.v1",
+  "checkpoint_id": "chk_acme_1_1787040060000000",
   "tenant_id": "acme",
-  "gate_id": "ed25519-gate-public-key-hex",
-  "last_sequence_number": 1042,
-  "last_action_id": "8f3b...12a",
-  "merkle_root_hash": "99ee...00f",
-  "total_records_count": 1042,
+  "checkpoint_sequence": 1,
+  "first_sequence": 1,
+  "last_sequence": 1042,
+  "stream_root_hash": "99ee...00f",
+  "total_events": 1042,
   "created_at": 1787040060000000,
-  "gate_signature": "signature-hex"
+  "signer": {
+    "public_key": "ed25519-gate-public-key-hex",
+    "signer_uri": "vault://tempus-gate-key",
+    "key_version": 1,
+    "algorithm": "Ed25519"
+  },
+  "signature": "signature-hex"
 }
 ```
 
@@ -80,14 +81,20 @@ def backup_database(source_db_path: str, target_db_path: str):
         src.backup(dst, pages=100, sleep=0.01)
 ```
 
-### Step 2: Publish Independent External Checkpoint
+### Step 2: Generate Signed Checkpoint & Export Event Stream
 
-Generate a signed checkpoint bundle and push it to an append-only, write-once-read-many (WORM) storage destination (e.g. S3 Object Lock, Cloud Storage Bucket Retention, or dedicated audit ledger):
+Generate a cryptographically signed monotonic checkpoint and export the hash-linked event stream:
 
 ```bash
-tempus export --json > /tmp/ledger_export.json
-# Sign and push checkpoint digest to remote cold storage
-aws s3 cp /tmp/checkpoint-bundle.json s3://acme-tempus-audit-checkpoints/$(date +%Y%m%d)/
+# 1. Create a signed checkpoint for the tenant
+tempus checkpoint create --tenant-id acme --out /tmp/checkpoint-acme-latest.json
+
+# 2. Export the incremental event stream
+tempus checkpoint export --tenant-id acme --from-seq 1 --out /tmp/event-stream-acme.json
+
+# 3. Publish to WORM / cold storage
+aws s3 cp /tmp/checkpoint-acme-latest.json s3://acme-tempus-audit-checkpoints/$(date +%Y%m%d)/
+aws s3 cp /tmp/event-stream-acme.json s3://acme-tempus-audit-checkpoints/$(date +%Y%m%d)/
 ```
 
 ---
@@ -108,10 +115,19 @@ When restoring a database following hardware failure or disaster recovery:
    tempus conformance --signer
    ```
 
-3. **Reconcile Against Independent Checkpoints:**
-   Compare the latest local sequence number and Merkle root against the external checkpoint stored in WORM storage.
-   - If `local_merkle_root != checkpoint_merkle_root`: **Tampering / Divergence detected! Fail closed.**
-   - If `local_sequence_number < checkpoint_sequence_number`: **Rollback detected! Invalidate and alert security operations.**
+3. **Reconcile Against Independent Checkpoints (`tempus checkpoint verify`):**
+   Cryptographically verify the restored database event stream against the external checkpoint retrieved from WORM storage:
+   ```bash
+   tempus checkpoint verify \
+     --checkpoint /path/to/checkpoint-acme-latest.json \
+     --stream /path/to/event-stream-acme.json
+   ```
+   The verifier enforces:
+   - **Gate Signature Authenticity:** Validates Ed25519 signature of the checkpoint root hash.
+   - **Monotonic Sequence Continuity:** Verifies sequence numbers are strictly incrementing without gaps (`ERR_SEQUENCE_GAP`).
+   - **Hash Chain Linkage:** Verifies `prev_event_hash` linkage across all stream items (`ERR_CHAIN_LINKAGE_BROKEN`).
+   - **Rollback Prevention:** Detects truncated or truncated stream (`ERR_ROLLBACK_DETECTED`).
+   - **Root Hash Conformance:** Detects any payload tampering (`ERR_EVENT_TAMPERED` / `ERR_ROOT_HASH_MISMATCH`).
 
 4. **Verify Active Actor Registrations & Unconsumed Permits:**
    ```bash
@@ -129,3 +145,4 @@ When restoring a database following hardware failure or disaster recovery:
 2. **Ambiguous Crash Recovery:**
    - If an executor crashes while executing an external call, its observation remains in `STARTED` or `UNKNOWN`.
    - On restart recovery, Tempus marks the state `UNKNOWN` and **never automatically retries** an external effect.
+

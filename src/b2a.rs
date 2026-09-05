@@ -97,6 +97,7 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
     }
 
     crate::phase3::initialize_schema(conn)?;
+    crate::events::initialize_schema(conn)?;
 
     Ok(())
 }
@@ -161,13 +162,13 @@ fn parse_canonical(raw: &str, label: &str) -> Result<(Value, String), String> {
     Ok((value, canonical))
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hex::encode(hasher.finalize())
 }
 
-fn decode_public_key(public_key: &str) -> Result<VerifyingKey, String> {
+pub(crate) fn decode_public_key(public_key: &str) -> Result<VerifyingKey, String> {
     let bytes = hex::decode(public_key).map_err(|e| format!("Invalid public key hex: {e}"))?;
     let bytes: [u8; 32] = bytes
         .try_into()
@@ -175,7 +176,7 @@ fn decode_public_key(public_key: &str) -> Result<VerifyingKey, String> {
     VerifyingKey::from_bytes(&bytes).map_err(|e| format!("Invalid Ed25519 public key: {e}"))
 }
 
-fn decode_signature(signature: &str) -> Result<Signature, String> {
+pub(crate) fn decode_signature(signature: &str) -> Result<Signature, String> {
     let bytes = hex::decode(signature).map_err(|e| format!("Invalid signature hex: {e}"))?;
     let bytes: [u8; 64] = bytes
         .try_into()
@@ -183,7 +184,7 @@ fn decode_signature(signature: &str) -> Result<Signature, String> {
     Ok(Signature::from_bytes(&bytes))
 }
 
-fn verify_message_signature(public_key: &str, message: &[u8], signature: &str) -> bool {
+pub(crate) fn verify_message_signature(public_key: &str, message: &[u8], signature: &str) -> bool {
     let Ok(verifying_key) = decode_public_key(public_key) else {
         return false;
     };
@@ -193,12 +194,12 @@ fn verify_message_signature(public_key: &str, message: &[u8], signature: &str) -
     verifying_key.verify(message, &signature).is_ok()
 }
 
-fn sign_digest(signer: &ConfiguredSigner, digest: &str) -> Result<String, String> {
+pub(crate) fn sign_digest(signer: &ConfiguredSigner, digest: &str) -> Result<String, String> {
     let bytes = hex::decode(digest).map_err(|e| format!("Invalid digest hex: {e}"))?;
     signer.sign(&bytes)
 }
 
-fn verify_digest_signature(public_key: &str, digest: &str, signature: &str) -> bool {
+pub(crate) fn verify_digest_signature(public_key: &str, digest: &str, signature: &str) -> bool {
     let Ok(bytes) = hex::decode(digest) else {
         return false;
     };
@@ -699,6 +700,15 @@ pub(crate) fn register_agent(
     if agent_count == 0 {
         crate::phase3::ensure_default_policy(&storage.conn, &registrar_key, registered_at)?;
     }
+
+    crate::events::record_event(
+        &storage.conn,
+        tenant_id,
+        "agent.registered",
+        &event_id,
+        &canonical_event,
+        registered_at,
+    )?;
 
     canonicalize(&json!({
         "schema_version": AGENT_REGISTRATION_SCHEMA,
@@ -1251,6 +1261,16 @@ pub(crate) fn request_action_signed(
             ],
         )
         .map_err(|e| format!("Failed to persist authorization receipt: {e}"))?;
+
+    crate::events::record_event(
+        &storage.conn,
+        &fields.tenant_id,
+        "action.authorized",
+        &authorization_id,
+        &authorization_json,
+        issued_at,
+    )?;
+
     Ok(authorization_json)
 }
 
@@ -1703,6 +1723,22 @@ pub(crate) fn commit_outcome_signed(
             ],
         )
         .map_err(|e| format!("Failed to persist execution receipt: {e}"))?;
+
+    let event_tenant = string_field(authorization, "tenant_id").unwrap_or_else(|_| "*".to_string());
+    let event_type = if outcome_status == "SUCCEEDED" {
+        "action.executed"
+    } else {
+        "action.failed"
+    };
+    crate::events::record_event(
+        &storage.conn,
+        &event_tenant,
+        event_type,
+        &receipt_id,
+        &execution_json,
+        completed_at,
+    )?;
+
     Ok(execution_json)
 }
 

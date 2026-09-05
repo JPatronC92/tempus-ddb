@@ -21,16 +21,15 @@ experience, and one production-grade executor path comes before a broad adapter 
   attestations.
 - Bounded SQLite connection pooling for executor state transitions.
 
-## 0.5 — Durable local operations
+## Available in 0.5 — Durable local operations
 
-- Stream validation and export so large ledgers do not require a second in-memory copy.
-- Define an append-only receipt event contract independent of SQLite.
-- Add signed external checkpoints that make database rollback or deletion detectable.
-- Publish backup, restore, reconciliation, and disaster-recovery procedures.
-- Add multi-process contention and recovery tests for permit consumption.
-
-Exit criteria: a restored deployment preserves idempotency and consumption state, and a
-reviewer can detect rollback against an independently stored checkpoint.
+- Stream validation and incremental export (`export_event_stream`) so large ledgers do not require in-memory duplication.
+- Append-only hash-linked event stream schema (`tempus.event-stream-event.v1`) recording authorizations, outcomes, registrations, and policies.
+- Monotonically sequenced Gate-signed external checkpoints (`tempus.checkpoint.v1`) binding cumulative SHA-256 stream root hashes.
+- Mathematical verification engine (`tempus.checkpoint-verification.v1`) detecting rollback attacks, deleted tail events, sequence gaps, and single-byte tampering.
+- Published backup, restore, reconciliation, and disaster-recovery procedures ([docs/BACKUP_AND_DISASTER_RECOVERY.md](docs/BACKUP_AND_DISASTER_RECOVERY.md)).
+- Multi-process contention, adversarial tampering, and crash recovery tests.
+- Unified mediated `ExecutorRuntime` and conformance testing suite for third-party adapters.
 
 ## 0.6 — Service deployment
 

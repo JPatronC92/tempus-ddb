@@ -18,8 +18,12 @@ class MockHttpTransport:
     def __init__(self):
         self.calls = []
 
-    def request(self, method: str, url: str, headers: Dict[str, str], payload: Dict[str, Any]) -> Dict[str, Any]:
-        self.calls.append({"method": method, "url": url, "headers": headers, "payload": payload})
+    def request(
+        self, method: str, url: str, headers: Dict[str, str], payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        self.calls.append(
+            {"method": method, "url": url, "headers": headers, "payload": payload}
+        )
         return {"status": "ok", "url_called": url, "received_method": method}
 
 
@@ -27,18 +31,39 @@ class MockSlackTransport:
     def __init__(self):
         self.messages = []
 
-    def request(self, endpoint: str, token: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def request(
+        self, endpoint: str, token: str, payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
         self.messages.append({"endpoint": endpoint, "token": token, "payload": payload})
-        return {"ok": True, "ts": "1725000000.000100", "message": {"text": payload.get("text")}}
+        return {
+            "ok": True,
+            "ts": "1725000000.000100",
+            "message": {"text": payload.get("text")},
+        }
 
 
 class MockPaymentTransport:
     def __init__(self):
         self.transfers = []
 
-    def disburse(self, secret_key: str, amount: str, asset: str, beneficiary: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
-        self.transfers.append({"amount": amount, "asset": asset, "beneficiary": beneficiary})
-        return {"status": "SETTLED", "tx_id": "tx_mock_123", "amount": amount, "asset": asset, "beneficiary": beneficiary}
+    def disburse(
+        self,
+        secret_key: str,
+        amount: str,
+        asset: str,
+        beneficiary: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        self.transfers.append(
+            {"amount": amount, "asset": asset, "beneficiary": beneficiary}
+        )
+        return {
+            "status": "SETTLED",
+            "tx_id": "tx_mock_123",
+            "amount": amount,
+            "asset": asset,
+            "beneficiary": beneficiary,
+        }
 
 
 def _setup_gate_and_agents(tmpdir, tenant_id="tenant-test"):
@@ -71,7 +96,9 @@ def _setup_gate_and_agents(tmpdir, tenant_id="tenant-test"):
 def test_http_executor_adapter():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         tenant_id = "tenant-http"
-        gate, gate_id, agent_id, exec_id, exec_db, exec_key, agent_key = _setup_gate_and_agents(tmpdir, tenant_id)
+        gate, gate_id, agent_id, exec_id, exec_db, exec_key, agent_key = (
+            _setup_gate_and_agents(tmpdir, tenant_id)
+        )
 
         transport = MockHttpTransport()
         adapter = HttpExecutorAdapter(
@@ -105,7 +132,10 @@ def test_http_executor_adapter():
 
         # Verify transport received isolated auth header
         assert len(transport.calls) == 1
-        assert transport.calls[0]["headers"]["Authorization"] == "Bearer secret-isolated-token"
+        assert (
+            transport.calls[0]["headers"]["Authorization"]
+            == "Bearer secret-isolated-token"
+        )
         assert transport.calls[0]["payload"]["user_id"] == 123
 
         # Replay attempt fails closed
@@ -119,7 +149,9 @@ def test_http_executor_adapter():
 def test_slack_executor_adapter():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         tenant_id = "tenant-slack"
-        gate, gate_id, agent_id, exec_id, exec_db, exec_key, agent_key = _setup_gate_and_agents(tmpdir, tenant_id)
+        gate, gate_id, agent_id, exec_id, exec_db, exec_key, agent_key = (
+            _setup_gate_and_agents(tmpdir, tenant_id)
+        )
 
         transport = MockSlackTransport()
         adapter = SlackExecutorAdapter(
@@ -162,7 +194,9 @@ def test_slack_executor_adapter():
 def test_payment_executor_adapter():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         tenant_id = "tenant-pay"
-        gate, gate_id, agent_id, exec_id, exec_db, exec_key, agent_key = _setup_gate_and_agents(tmpdir, tenant_id)
+        gate, gate_id, agent_id, exec_id, exec_db, exec_key, agent_key = (
+            _setup_gate_and_agents(tmpdir, tenant_id)
+        )
 
         transport = MockPaymentTransport()
         adapter = PaymentExecutorAdapter(
@@ -183,7 +217,11 @@ def test_payment_executor_adapter():
             "resource": "treasury/main",
             "requested_at": int(time.time() * 1_000_000),
             "input": {"invoice_id": "INV-2026-99"},
-            "money": {"amount": "250.00", "asset": "USD", "beneficiary": "contractor-1"},
+            "money": {
+                "amount": "250.00",
+                "asset": "USD",
+                "beneficiary": "contractor-1",
+            },
         }
 
         auth_resp_str = gate.request_action(json.dumps(intent), agent_key, 60)

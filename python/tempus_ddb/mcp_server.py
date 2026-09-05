@@ -42,6 +42,7 @@ LOCAL_KEYFILE_TOOL_NAMES = {
     "tempus_commit_outcome",
 }
 
+
 # ── Path-traversal guard ──────────────────────────────────────────────
 def validate_path(path: str) -> str:
     """Resolve *path* and ensure it stays inside SANDBOX_DIR."""
@@ -52,6 +53,7 @@ def validate_path(path: str) -> str:
         raise ValueError(f"Path escapes sandbox: {path}")
     return resolved
 
+
 # ── Input validation helpers ─────────────────────────────────────
 def validate_json_string(value: str, field_name: str) -> None:
     """Ensure *value* is a valid JSON string."""
@@ -60,8 +62,10 @@ def validate_json_string(value: str, field_name: str) -> None:
     except (json.JSONDecodeError, TypeError) as exc:
         raise ValueError(f"'{field_name}' must be a valid JSON string: {exc}")
 
+
 # ── MCP server setup ──────────────────────────────────────────────────
 app = Server("tempus-ddb-mcp")
+
 
 @app.list_tools()
 async def list_tools() -> list[Tool]:
@@ -73,9 +77,18 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "db": {"type": "string", "description": "Tempus database path"},
-                    "intent": {"type": "string", "description": "tempus.action-intent.v1 JSON"},
-                    "agent_id": {"type": "string", "description": "Ed25519 public key of the requesting agent"},
-                    "agent_signature": {"type": "string", "description": "Ed25519 signature over the canonical intent"},
+                    "intent": {
+                        "type": "string",
+                        "description": "tempus.action-intent.v1 JSON",
+                    },
+                    "agent_id": {
+                        "type": "string",
+                        "description": "Ed25519 public key of the requesting agent",
+                    },
+                    "agent_signature": {
+                        "type": "string",
+                        "description": "Ed25519 signature over the canonical intent",
+                    },
                     "ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
                 },
                 "required": ["db", "intent", "agent_id", "agent_signature"],
@@ -89,7 +102,10 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "db": {"type": "string", "description": "Tempus database path"},
                     "authorization_id": {"type": "string"},
-                    "outcome": {"type": "string", "description": "tempus.action-outcome.v1 JSON including executor_id and executor_signature"},
+                    "outcome": {
+                        "type": "string",
+                        "description": "tempus.action-outcome.v1 JSON including executor_id and executor_signature",
+                    },
                 },
                 "required": ["db", "authorization_id", "outcome"],
             },
@@ -147,132 +163,193 @@ async def list_tools() -> list[Tool]:
         ),
     ]
     if TEMPUS_LOCAL_KEYFILE_TOOLS:
-        tools.extend([
-            Tool(
-                name="tempus_request_action",
-                description="Development-only: sign an intent from a local agent key file and request a permit.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "db": {"type": "string", "description": "Tempus database path"},
-                        "intent": {"type": "string", "description": "tempus.action-intent.v1 JSON"},
-                        "agent_keyfile": {"type": "string", "description": "Requesting agent key file"},
-                        "ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        tools.extend(
+            [
+                Tool(
+                    name="tempus_request_action",
+                    description="Development-only: sign an intent from a local agent key file and request a permit.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "db": {
+                                "type": "string",
+                                "description": "Tempus database path",
+                            },
+                            "intent": {
+                                "type": "string",
+                                "description": "tempus.action-intent.v1 JSON",
+                            },
+                            "agent_keyfile": {
+                                "type": "string",
+                                "description": "Requesting agent key file",
+                            },
+                            "ttl_seconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 86400,
+                            },
+                        },
+                        "required": ["db", "intent", "agent_keyfile"],
                     },
-                    "required": ["db", "intent", "agent_keyfile"],
-                },
-            ),
-            Tool(
-                name="tempus_commit_outcome",
-                description="Development-only: sign an executor outcome from a local key file and append it.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "db": {"type": "string", "description": "Tempus database path"},
-                        "authorization_id": {"type": "string"},
-                        "outcome": {"type": "string", "description": "tempus.action-outcome.v1 JSON"},
-                        "executor_keyfile": {"type": "string", "description": "Executor key file"},
+                ),
+                Tool(
+                    name="tempus_commit_outcome",
+                    description="Development-only: sign an executor outcome from a local key file and append it.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "db": {
+                                "type": "string",
+                                "description": "Tempus database path",
+                            },
+                            "authorization_id": {"type": "string"},
+                            "outcome": {
+                                "type": "string",
+                                "description": "tempus.action-outcome.v1 JSON",
+                            },
+                            "executor_keyfile": {
+                                "type": "string",
+                                "description": "Executor key file",
+                            },
+                        },
+                        "required": [
+                            "db",
+                            "authorization_id",
+                            "outcome",
+                            "executor_keyfile",
+                        ],
                     },
-                    "required": ["db", "authorization_id", "outcome", "executor_keyfile"],
-                },
-            ),
-        ])
+                ),
+            ]
+        )
     if TEMPUS_ADMIN_TOOLS:
-        tools.extend([
-        Tool(
-            name="tempus_init",
-            description="Initialize the SQLite database schema for Tempus DDB.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "db": {"type": "string", "description": "Database file path"}
-                },
-                "required": ["db"]
-            }
-        ),
-        Tool(
-            name="tempus_gen_keys",
-            description="Generate a new Ed25519 cryptographic keypair.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "output": {"type": "string", "description": "Key file output path"}
-                },
-                "required": ["output"]
-            }
-        ),
-        Tool(
-            name="tempus_register_agent",
-            description="Register an agent through a gate-signed immutable delegation event.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "db": {"type": "string", "description": "Database file path"},
-                    "public_key": {"type": "string", "description": "Ed25519 public key (64 hex chars)"},
-                    "alias": {"type": "string", "description": "Human-readable alias for the agent"},
-                    "metadata": {"type": "string", "description": "Optional JSON metadata for the agent"}
-                },
-                "required": ["db", "public_key", "alias"]
-            }
-        ),
-        Tool(
-            name="tempus_whoami",
-            description="Return the identity (public key and alias) of the current agent based on the keyfile.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "db": {"type": "string", "description": "Database file path"},
-                    "keyfile": {"type": "string", "description": "Path to the agent's key file"}
-                },
-                "required": ["db", "keyfile"]
-            }
-        ),
-        ])
+        tools.extend(
+            [
+                Tool(
+                    name="tempus_init",
+                    description="Initialize the SQLite database schema for Tempus DDB.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "db": {
+                                "type": "string",
+                                "description": "Database file path",
+                            }
+                        },
+                        "required": ["db"],
+                    },
+                ),
+                Tool(
+                    name="tempus_gen_keys",
+                    description="Generate a new Ed25519 cryptographic keypair.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "output": {
+                                "type": "string",
+                                "description": "Key file output path",
+                            }
+                        },
+                        "required": ["output"],
+                    },
+                ),
+                Tool(
+                    name="tempus_register_agent",
+                    description="Register an agent through a gate-signed immutable delegation event.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "db": {
+                                "type": "string",
+                                "description": "Database file path",
+                            },
+                            "public_key": {
+                                "type": "string",
+                                "description": "Ed25519 public key (64 hex chars)",
+                            },
+                            "alias": {
+                                "type": "string",
+                                "description": "Human-readable alias for the agent",
+                            },
+                            "metadata": {
+                                "type": "string",
+                                "description": "Optional JSON metadata for the agent",
+                            },
+                        },
+                        "required": ["db", "public_key", "alias"],
+                    },
+                ),
+                Tool(
+                    name="tempus_whoami",
+                    description="Return the identity (public key and alias) of the current agent based on the keyfile.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "db": {
+                                "type": "string",
+                                "description": "Database file path",
+                            },
+                            "keyfile": {
+                                "type": "string",
+                                "description": "Path to the agent's key file",
+                            },
+                        },
+                        "required": ["db", "keyfile"],
+                    },
+                ),
+            ]
+        )
     if TEMPUS_LEGACY_TOOLS:
         for name, description in [
             ("tempus_record_decision", "Legacy direct decision recorder."),
             ("tempus_record", "Legacy alias for direct decision recording."),
         ]:
-            tools.append(Tool(
-                name=name,
-                description=description,
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "db": {"type": "string"},
-                        "payload": {"type": "string"},
-                        "rules": {"type": "string"},
-                        "keyfile": {"type": "string"},
-                        "genesis": {"type": "boolean"},
+            tools.append(
+                Tool(
+                    name=name,
+                    description=description,
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "db": {"type": "string"},
+                            "payload": {"type": "string"},
+                            "rules": {"type": "string"},
+                            "keyfile": {"type": "string"},
+                            "genesis": {"type": "boolean"},
+                        },
+                        "required": ["db", "payload", "rules", "keyfile"],
                     },
-                    "required": ["db", "payload", "rules", "keyfile"],
-                },
-            ))
+                )
+            )
         for name, description in [
             ("tempus_validate", "Validate the legacy decision chain."),
             ("tempus_list", "List legacy decisions."),
             ("tempus_export", "Export legacy decisions."),
             ("tempus_count", "Count legacy decisions."),
         ]:
-            tools.append(Tool(
-                name=name,
-                description=description,
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "db": {"type": "string"},
-                        "limit": {"type": "integer"},
-                        "offset": {"type": "integer"},
+            tools.append(
+                Tool(
+                    name=name,
+                    description=description,
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "db": {"type": "string"},
+                            "limit": {"type": "integer"},
+                            "offset": {"type": "integer"},
+                        },
+                        "required": ["db"],
                     },
-                    "required": ["db"],
-                },
-            ))
+                )
+            )
     if TEMPUS_DESTRUCTIVE_TOOLS:
-        tools.append(Tool(
-            name="tempus_cleanup",
-            description="Delete demo database and keys. Disabled by default.",
-            inputSchema={"type": "object", "properties": {}, "required": []},
-        ))
+        tools.append(
+            Tool(
+                name="tempus_cleanup",
+                description="Delete demo database and keys. Disabled by default.",
+                inputSchema={"type": "object", "properties": {}, "required": []},
+            )
+        )
     return tools
 
 
@@ -294,7 +371,10 @@ def _handle_record(arguments: dict) -> list[TextContent]:
     result = {
         "status": "success",
         "message": "Record successful.",
-        "output": json.loads(output) if isinstance(output, str) and (output.strip().startswith("{") or output.strip().startswith("[")) else output
+        "output": json.loads(output)
+        if isinstance(output, str)
+        and (output.strip().startswith("{") or output.strip().startswith("["))
+        else output,
     }
     if TEMPUS_MODE == "demo":
         result["mode"] = TEMPUS_MODE
@@ -383,11 +463,19 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "tempus-gate",
                     json.dumps({"can_delegate": True, "role": "gate"}),
                 )
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": f"Database initialized: {db_path}",
-                "db_path": db_path
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": f"Database initialized: {db_path}",
+                            "db_path": db_path,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         elif name == "tempus_gen_keys":
             output_file = validate_path(arguments.get("output", TEMPUS_GATE_KEYFILE))
@@ -398,12 +486,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     del output_json["private_key"]
             except Exception:
                 output_json = output
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": f"Keys generated at {output_file}",
-                "key_file": output_file,
-                "output": output_json
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": f"Keys generated at {output_file}",
+                            "key_file": output_file,
+                            "output": output_json,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         elif name in ("tempus_record", "tempus_record_decision"):
             return _handle_record(arguments)
@@ -421,12 +517,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     raise RuntimeError(f"TEMPUS_LEDGER_INTEGRITY_FAILURE: {e!s}")
                 raise
 
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": "Validation query completed.",
-                "db_path": db_path,
-                "result": output
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": "Validation query completed.",
+                            "db_path": db_path,
+                            "result": output,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         elif name == "tempus_list":
             db_path = validate_path(arguments.get("db", "tempus.db"))
@@ -434,34 +538,62 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             offset = arguments.get("offset", 0)
             db = TempusDDB(db_path, _gate_keyfile())
             output = db.list(limit=limit, offset=offset)
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": f"Listed {limit} decisions (offset {offset}).",
-                "db_path": db_path,
-                "decisions": json.loads(output) if isinstance(output, str) else output
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": f"Listed {limit} decisions (offset {offset}).",
+                            "db_path": db_path,
+                            "decisions": json.loads(output)
+                            if isinstance(output, str)
+                            else output,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         elif name == "tempus_export":
             db_path = validate_path(arguments.get("db", "tempus.db"))
             db = TempusDDB(db_path, _gate_keyfile())
             output = db.export()
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": "Ledger exported successfully.",
-                "db_path": db_path,
-                "decisions": json.loads(output) if isinstance(output, str) else output
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": "Ledger exported successfully.",
+                            "db_path": db_path,
+                            "decisions": json.loads(output)
+                            if isinstance(output, str)
+                            else output,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         elif name == "tempus_count":
             db_path = validate_path(arguments.get("db", "tempus.db"))
             db = TempusDDB(db_path, _gate_keyfile())
             count = db.count()
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": f"Total decisions: {count}",
-                "db_path": db_path,
-                "total_decisions": count
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": f"Total decisions: {count}",
+                            "db_path": db_path,
+                            "total_decisions": count,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         elif name == "tempus_cleanup":
             db_path = os.path.join(SANDBOX_DIR, "tempus.db")
@@ -471,11 +603,19 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 if os.path.exists(p):
                     os.remove(p)
                     removed.append(p)
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": "Cleanup successful.",
-                "removed": removed
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": "Cleanup successful.",
+                            "removed": removed,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         elif name == "tempus_register_agent":
             db_path = validate_path(arguments.get("db", "tempus.db"))
@@ -484,23 +624,43 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             metadata = arguments.get("metadata", "{}")
             db = TempusDDB(db_path, _gate_keyfile())
             output = db.register_agent(public_key, alias, metadata)
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": f"Agent '{alias}' registered.",
-                "db_path": db_path,
-                "result": json.loads(output) if isinstance(output, str) else output
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": f"Agent '{alias}' registered.",
+                            "db_path": db_path,
+                            "result": json.loads(output)
+                            if isinstance(output, str)
+                            else output,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         elif name == "tempus_list_agents":
             db_path = validate_path(arguments.get("db", "tempus.db"))
             db = TempusDDB(db_path, _gate_keyfile())
             output = db.list_agents()
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": "Agents listed.",
-                "db_path": db_path,
-                "agents": json.loads(output) if isinstance(output, str) else output
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": "Agents listed.",
+                            "db_path": db_path,
+                            "agents": json.loads(output)
+                            if isinstance(output, str)
+                            else output,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         elif name == "tempus_list_policies":
             output = _gate_db(arguments).list_policies()
@@ -515,18 +675,36 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             keyfile = validate_path(arguments.get("keyfile", "keys.json"))
             db = TempusDDB(db_path, keyfile)
             output = db.whoami()
-            return [TextContent(type="text", text=json.dumps({
-                "status": "success",
-                "message": "Agent identity retrieved.",
-                "identity": json.loads(output) if isinstance(output, str) else output
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": "Agent identity retrieved.",
+                            "identity": json.loads(output)
+                            if isinstance(output, str)
+                            else output,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
         else:
-            return [TextContent(type="text", text=json.dumps({
-                "status": "error",
-                "error": "TEMPUS_UNKNOWN_TOOL",
-                "message": f"Unknown tool: {name}"
-            }, indent=2))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "error",
+                            "error": "TEMPUS_UNKNOWN_TOOL",
+                            "message": f"Unknown tool: {name}",
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
 
     except Exception as e:
         err_msg = str(e)
@@ -536,27 +714,36 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 error_code = token
                 break
 
-        return [TextContent(type="text", text=json.dumps({
-            "status": "error",
-            "error": error_code,
-            "tool": name,
-            "message": err_msg
-        }, indent=2))]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {
+                        "status": "error",
+                        "error": error_code,
+                        "tool": name,
+                        "message": err_msg,
+                    },
+                    indent=2,
+                ),
+            )
+        ]
+
 
 async def main():
     try:
         async with stdio_server() as (read_stream, write_stream):
             await app.run(
-                read_stream,
-                write_stream,
-                app.create_initialization_options()
+                read_stream, write_stream, app.create_initialization_options()
             )
     except KeyboardInterrupt:
         pass
 
+
 def main_sync():
     """Entry point for the tempus-mcp console script."""
     asyncio.run(main())
+
 
 if __name__ == "__main__":
     main_sync()
