@@ -128,10 +128,15 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
       - name: Publish to crates.io
-        if: steps.version.outputs.tag == env.RELEASE_TAG && secrets.CRATES_IO_TOKEN != ''
+        if: steps.version.outputs.tag == env.RELEASE_TAG
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: cargo publish
+        run: |
+          if [ -n "$CARGO_REGISTRY_TOKEN" ]; then
+            cargo publish
+          else
+            echo "CRATES_IO_TOKEN is not configured; skipping crates.io publish."
+          fi
 
       # Publish to PyPI using Trusted Publishing (OIDC) or PYPI_API_TOKEN secret
       - name: Publish to PyPI
