@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0] - 2026-09-05
+
+### Added
+- **Append-Only Event Stream (`tempus.event-stream-event.v1`)**: Monotonically sequenced, hash-linked (`prev_event_hash` ➔ `event_digest`) event recording for all authorizations, outcomes, agent registrations, and policy installations.
+- **Signed Monotonic Checkpoints (`tempus.checkpoint.v1`)**: Gate-signed external checkpoints binding cumulative SHA-256 stream root hashes and sequence windows (`first_sequence`..`last_sequence`).
+- **Cryptographic Stream Verifier (`tempus.checkpoint-verification.v1`)**: Offline mathematical verification engine detecting rollback attacks (`ERR_ROLLBACK_DETECTED`), sequence gaps (`ERR_SEQUENCE_GAP`), broken chain linkage (`ERR_CHAIN_LINKAGE_BROKEN`), and single-byte tampering (`ERR_EVENT_TAMPERED`).
+- **Unified Mediated Executor Runtime (`ExecutorRuntime`)**: Standardized base runtime with protocol `ActionAdapter` and conformance testing harness (`AdapterConformanceHarness` in `tempus_ddb.testing`).
+- **CLI Checkpoint & DR Commands**: Added `tempus checkpoint create`, `tempus checkpoint export`, and `tempus checkpoint verify`.
+- **Disaster Recovery Guide**: Published comprehensive procedures in `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
+
 ## [0.4.2] - 2026-08-31
 
 ### Changed

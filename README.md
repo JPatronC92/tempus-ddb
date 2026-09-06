@@ -167,9 +167,9 @@ python -m pip install tempus-ddb
 ```
 
 ### 2. From GitHub Release Wheels & SBOM
-Download the pre-built native wheel matching your platform or the SPDX SBOM from [GitHub Releases v0.4.2](https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.4.2):
+Download the pre-built native wheel matching your platform or the SPDX SBOM from [GitHub Releases v0.5.0](https://github.com/elbuilder77/tempus-ddb/releases/tag/v0.5.0):
 ```bash
-pip install ./tempus_ddb-0.4.2-<platform>.whl
+pip install ./tempus_ddb-0.5.0-<platform>.whl
 ```
 
 ### 3. From Source (Development)
