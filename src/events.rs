@@ -261,8 +261,8 @@ pub(crate) fn verify_checkpoint_stream(
     let checkpoint: Value = serde_json::from_str(checkpoint_json)
         .map_err(|e| format!("Invalid checkpoint JSON: {e}"))?;
 
-    let stream: Value = serde_json::from_str(stream_json)
-        .map_err(|e| format!("Invalid stream JSON: {e}"))?;
+    let stream: Value =
+        serde_json::from_str(stream_json).map_err(|e| format!("Invalid stream JSON: {e}"))?;
 
     let events = match stream.as_array() {
         Some(arr) => arr,
@@ -312,7 +312,9 @@ pub(crate) fn verify_checkpoint_stream(
     }
     let canonical_chk_bytes = canonical_json_bytes(&unsigned_chk)?;
 
-    let signer_obj = checkpoint.get("signer").ok_or("Checkpoint missing signer")?;
+    let signer_obj = checkpoint
+        .get("signer")
+        .ok_or("Checkpoint missing signer")?;
     let pubkey_hex = signer_obj
         .get("public_key")
         .and_then(|v| v.as_str())
@@ -379,10 +381,22 @@ pub(crate) fn verify_checkpoint_stream(
     let mut verified_count = 0;
 
     for (idx, event) in events.iter().enumerate() {
-        let seq = event.get("sequence_number").and_then(|v| v.as_u64()).unwrap_or(0);
-        let ev_tenant = event.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("");
-        let prev_hash = event.get("prev_event_hash").and_then(|v| v.as_str()).unwrap_or("");
-        let digest = event.get("event_digest").and_then(|v| v.as_str()).unwrap_or("");
+        let seq = event
+            .get("sequence_number")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let ev_tenant = event
+            .get("tenant_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let prev_hash = event
+            .get("prev_event_hash")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let digest = event
+            .get("event_digest")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
         // Multi-tenant isolation check
         if ev_tenant != tenant_id {
@@ -417,7 +431,8 @@ pub(crate) fn verify_checkpoint_stream(
                 "events_verified": verified_count,
                 "reason_code": "ERR_CHAIN_LINKAGE_BROKEN",
                 "message": format!("Hash chain broken at sequence {seq}")
-            }).to_string());
+            })
+            .to_string());
         }
 
         // Recompute event digest
@@ -436,7 +451,8 @@ pub(crate) fn verify_checkpoint_stream(
                 "events_verified": verified_count,
                 "reason_code": "ERR_EVENT_TAMPERED",
                 "message": format!("Event payload tampered at sequence {seq}")
-            }).to_string());
+            })
+            .to_string());
         }
 
         cumulative_hasher.update(digest.as_bytes());

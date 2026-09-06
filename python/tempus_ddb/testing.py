@@ -119,9 +119,8 @@ class AdapterConformanceHarness:
             permit_1 = self.issue_permit(env, idempotency_key="chk-valid-01")
             receipt_str = env["runtime"].execute_permit(permit_1, adapter)
             receipt = json.loads(receipt_str)
-            assert receipt["status"] == "SUCCEEDED", (
-                f"Expected SUCCEEDED, got {receipt}"
-            )
+            if receipt.get("status") != "SUCCEEDED":
+                raise AssertionError(f"Expected SUCCEEDED, got {receipt}")
 
             # 2. Check atomic single consumption (replay prevention)
             replay_failed = False
@@ -129,8 +128,12 @@ class AdapterConformanceHarness:
                 env["runtime"].execute_permit(permit_1, adapter)
             except Exception as exc:
                 replay_failed = True
-                assert "consumed" in str(exc).lower() or "already" in str(exc).lower()
-            assert replay_failed, "Second execution of consumed permit MUST fail closed"
+                if not ("consumed" in str(exc).lower() or "already" in str(exc).lower()):
+                    raise AssertionError(f"Unexpected replay error message: {exc}")
+            if not replay_failed:
+                raise AssertionError(
+                    "Second execution of consumed permit MUST fail closed"
+                )
 
             # 3. Check unsupported action rejection
             permit_unsupported = self.issue_permit(
@@ -142,4 +145,7 @@ class AdapterConformanceHarness:
                 permit_unsupported, adapter
             )
             unsupported_receipt = json.loads(unsupported_receipt_str)
-            assert unsupported_receipt["status"] == "FAILED"
+            if unsupported_receipt.get("status") != "FAILED":
+                raise AssertionError(
+                    f"Expected FAILED for unsupported action, got {unsupported_receipt}"
+                )
