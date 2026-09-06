@@ -115,9 +115,11 @@ jobs:
       - name: Extract version from Cargo.toml
         id: version
         run: |
-          echo "version=$(grep -oP '(?<=version = ").*?(?=")' Cargo.toml)" >> $GITHUB_OUTPUT
+          VERSION=$(grep -oP '(?<=version = ").*?(?=")' Cargo.toml)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
       - name: Publish to crates.io
-        if: steps.version.outputs.version == github.event.release.tag_name[1:]
+        if: steps.version.outputs.tag == github.event.release.tag_name
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
 
       # Publish to PyPI using Trusted Publishing (OIDC) or PYPI_API_TOKEN secret
