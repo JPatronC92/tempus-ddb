@@ -3,13 +3,22 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag name (e.g. v0.5.0)'
+        required: false
+        default: 'v0.5.0'
 
 permissions:
   contents: read
   id-token: write
 
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag_name || 'v0.5.0' }}
+
 concurrency:
-  group: release-${{ github.event.release.tag_name }}
+  group: release-${{ github.event.release.tag_name || inputs.tag_name || 'v0.5.0' }}
   cancel-in-progress: false
 
 jobs:
@@ -86,8 +95,8 @@ jobs:
       - name: Generate SPDX SBOM
         run: >-
           python scripts/generate_sbom.py
-          --version "${{ github.event.release.tag_name }}"
-          --output "sbom/tempus-ddb-${{ github.event.release.tag_name }}.spdx.json"
+          --version "${{ env.RELEASE_TAG }}"
+          --output "sbom/tempus-ddb-${{ env.RELEASE_TAG }}.spdx.json"
       - name: Attest release provenance
         uses: actions/attest-build-provenance@v2
         with:
@@ -96,21 +105,21 @@ jobs:
         uses: actions/attest-sbom@v2
         with:
           subject-path: dist/*
-          sbom-path: sbom/tempus-ddb-${{ github.event.release.tag_name }}.spdx.json
+          sbom-path: sbom/tempus-ddb-${{ env.RELEASE_TAG }}.spdx.json
       - name: Upload to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: dist/*
           file_glob: true
-          tag: ${{ github.event.release.tag_name }}
+          tag: ${{ env.RELEASE_TAG }}
           overwrite: true
       - name: Upload SBOM to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: sbom/tempus-ddb-${{ github.event.release.tag_name }}.spdx.json
-          tag: ${{ github.event.release.tag_name }}
+          file: sbom/tempus-ddb-${{ env.RELEASE_TAG }}.spdx.json
+          tag: ${{ env.RELEASE_TAG }}
           overwrite: true
       - name: Extract version from Cargo.toml
         id: version
@@ -119,7 +128,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
       - name: Publish to crates.io
-        if: steps.version.outputs.tag == github.event.release.tag_name && secrets.CRATES_IO_TOKEN != ''
+        if: steps.version.outputs.tag == env.RELEASE_TAG && secrets.CRATES_IO_TOKEN != ''
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: cargo publish
